@@ -11,11 +11,11 @@ pip install ducklake-client
 ## Open a DuckLake connection
 
 ```python
-from ducklake_client import DuckLake
+from ducklake_client import DiskStorage, DuckDBCatalog, DuckLake
 
 lake = DuckLake(
-    catalog="metadata.ducklake",
-    storage="data",
+    catalog=DuckDBCatalog("metadata.ducklake"),
+    storage=DiskStorage("data"),
 )
 
 try:
@@ -31,9 +31,12 @@ finally:
 ## Context manager usage
 
 ```python
-from ducklake_client import DuckLake
+from ducklake_client import DiskStorage, DuckDBCatalog, DuckLake
 
-with DuckLake(catalog="metadata.ducklake", storage="data") as lake:
+with DuckLake(
+    catalog=DuckDBCatalog("metadata.ducklake"),
+    storage=DiskStorage("data"),
+) as lake:
     lake.execute("CREATE TABLE IF NOT EXISTS lake.main.events (id INTEGER)")
     lake.execute("INSERT INTO lake.main.events VALUES (?)", [1])
     print(lake.sql("SELECT count(*) FROM lake.main.events").fetchone())
@@ -44,9 +47,12 @@ with DuckLake(catalog="metadata.ducklake", storage="data") as lake:
 Use `transaction()` to group statements on the same DuckDB connection. The transaction commits when the context exits normally and rolls back if an exception is raised.
 
 ```python
-from ducklake_client import DuckLake
+from ducklake_client import DiskStorage, DuckDBCatalog, DuckLake
 
-with DuckLake(catalog="metadata.ducklake", storage="data") as lake:
+with DuckLake(
+    catalog=DuckDBCatalog("metadata.ducklake"),
+    storage=DiskStorage("data"),
+) as lake:
     with lake.transaction() as tx:
         tx.execute("CREATE TABLE IF NOT EXISTS lake.main.items (id INTEGER, name VARCHAR)")
         tx.execute("INSERT INTO lake.main.items VALUES (?, ?)", [1, "example"])
@@ -54,20 +60,25 @@ with DuckLake(catalog="metadata.ducklake", storage="data") as lake:
 
 ## Configuration
 
-Local filesystem paths can be passed as plain strings:
+`DuckLake` requires explicit catalog and storage config objects:
 
 ```python
-lake = DuckLake(catalog="metadata.ducklake", storage="data")
-```
-
-You can also use explicit config objects:
-
-```python
-from ducklake_client import DuckDBConfig, DuckDBCatalog, DuckLake, FileStorage
+from ducklake_client import DiskStorage, DuckDBCatalog, DuckLake
 
 lake = DuckLake(
     catalog=DuckDBCatalog("metadata.ducklake"),
-    storage=FileStorage("data"),
+    storage=DiskStorage("data"),
+)
+```
+
+You can pass DuckDB runtime settings with `DuckDBConfig`:
+
+```python
+from ducklake_client import DiskStorage, DuckDBConfig, DuckDBCatalog, DuckLake
+
+lake = DuckLake(
+    catalog=DuckDBCatalog("metadata.ducklake"),
+    storage=DiskStorage("data"),
     duckdb=DuckDBConfig(
         database=":memory:",
         threads=4,
@@ -76,4 +87,4 @@ lake = DuckLake(
 )
 ```
 
-SQLite, Postgres, and S3 configs are available through `SqliteCatalog`, `PostgresCatalog`, and `S3Storage`.
+Catalogs can be `DuckDBCatalog`, `SqliteCatalog`, or `PostgresCatalog`. Storage can be `DiskStorage` or `S3Storage`.

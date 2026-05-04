@@ -8,15 +8,15 @@ from pathlib import Path
 from typing import Any
 
 from ducklake_client._connection import ConnectionManager
+from ducklake_client._params import QueryParameters, normalize_parameters
 from ducklake_client.config import (
+    CatalogConfig,
     CatalogInput,
     DuckDBConfig,
+    StorageConfig,
     StorageInput,
-    parse_catalog,
-    parse_storage,
     quote_literal,
 )
-from ducklake_client._params import QueryParameters, normalize_parameters
 from ducklake_client.transaction import Transaction
 
 _EXTENSION_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
@@ -34,10 +34,15 @@ class DuckLake:
         duckdb: DuckDBConfig | None = None,
         attach_options: Mapping[str, object] | None = None,
     ) -> None:
+        if not isinstance(catalog, CatalogConfig):
+            raise TypeError("catalog must be a DuckDBCatalog, PostgresCatalog, or SqliteCatalog")
+        if not isinstance(storage, StorageConfig):
+            raise TypeError("storage must be a DiskStorage or S3Storage")
+
         self.alias = alias
         self._manager = ConnectionManager(
-            catalog=parse_catalog(catalog),
-            storage=parse_storage(storage),
+            catalog=catalog,
+            storage=storage,
             alias=alias,
             duckdb=duckdb or DuckDBConfig(),
             attach_options=attach_options,
@@ -91,5 +96,3 @@ class DuckLake:
 
     def __getattr__(self, name: str) -> Any:
         return getattr(self.raw_connection(), name)
-
-

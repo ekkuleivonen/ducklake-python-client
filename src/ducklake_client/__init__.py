@@ -2,9 +2,9 @@
 
 from ducklake_client.config import (
     CatalogConfig,
+    DiskStorage,
     DuckDBCatalog,
     DuckDBConfig,
-    FileStorage,
     PostgresCatalog,
     S3Storage,
     SqliteCatalog,
@@ -16,7 +16,7 @@ from ducklake_client.exceptions import (
     DuckLakeError,
     DuckLakeQueryError,
 )
-from ducklake_client.lake import DuckLake
+from ducklake_client.client import DuckLake
 from ducklake_client.transaction import Transaction
 
 __all__ = [
@@ -28,7 +28,7 @@ __all__ = [
     "DuckLakeConnectionError",
     "DuckLakeError",
     "DuckLakeQueryError",
-    "FileStorage",
+    "DiskStorage",
     "PostgresCatalog",
     "S3Storage",
     "SqliteCatalog",

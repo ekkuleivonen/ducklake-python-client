@@ -1,4 +1,4 @@
-"""Typed configuration and URL parsing for DuckLake connections."""
+"""Typed configuration for DuckLake connections."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TypeAlias
-from urllib.parse import SplitResult, parse_qs, unquote, urlsplit, urlunsplit
+from urllib.parse import urlsplit, urlunsplit
 
 from ducklake_client.exceptions import DuckLakeConfigError
 
@@ -85,7 +85,7 @@ class PostgresCatalog(CatalogConfig):
 
 
 @dataclass(frozen=True)
-class FileStorage(StorageConfig):
+class DiskStorage(StorageConfig):
     """Local filesystem data storage."""
 
     path: str | Path
@@ -187,44 +187,8 @@ class DuckDBConfig:
         return settings
 
 
-CatalogInput: TypeAlias = str | CatalogConfig
-StorageInput: TypeAlias = str | StorageConfig
-
-
-def parse_catalog(catalog: CatalogInput) -> CatalogConfig:
-    if isinstance(catalog, CatalogConfig):
-        return catalog
-    if not catalog:
-        raise DuckLakeConfigError("catalog must not be empty")
-
-    parsed = urlsplit(catalog)
-    scheme = parsed.scheme.lower()
-    if scheme in {"postgres", "postgresql"}:
-        return PostgresCatalog(dsn=catalog)
-    if scheme == "sqlite":
-        return SqliteCatalog(path=_file_url_path(parsed))
-    if scheme in {"duckdb", "file"}:
-        return DuckDBCatalog(path=_file_url_path(parsed))
-    if scheme:
-        raise DuckLakeConfigError(f"unsupported DuckLake catalog URL scheme: {parsed.scheme!r}")
-    return DuckDBCatalog(path=catalog)
-
-
-def parse_storage(storage: StorageInput) -> StorageConfig:
-    if isinstance(storage, StorageConfig):
-        return storage
-    if not storage:
-        raise DuckLakeConfigError("storage must not be empty")
-
-    parsed = urlsplit(storage)
-    scheme = parsed.scheme.lower()
-    if scheme == "s3":
-        return _parse_s3_storage(parsed)
-    if scheme == "file":
-        return FileStorage(path=_file_url_path(parsed))
-    if scheme:
-        raise DuckLakeConfigError(f"unsupported DuckLake storage URL scheme: {parsed.scheme!r}")
-    return FileStorage(path=storage)
+CatalogInput: TypeAlias = DuckDBCatalog | PostgresCatalog | SqliteCatalog
+StorageInput: TypeAlias = DiskStorage | S3Storage
 
 
 def quote_identifier(value: str) -> str:
@@ -233,58 +197,6 @@ def quote_identifier(value: str) -> str:
 
 def quote_literal(value: object) -> str:
     return "'" + str(value).replace("'", "''") + "'"
-
-
-def _parse_s3_storage(parsed: SplitResult) -> S3Storage:
-    bucket = unquote(parsed.netloc)
-    if not bucket:
-        raise DuckLakeConfigError("S3 storage URL must include a bucket")
-
-    query = {
-        key: values[-1]
-        for key, values in parse_qs(parsed.query, keep_blank_values=True).items()
-    }
-    endpoint = query.pop("endpoint", None)
-    region = query.pop("region", None)
-    key_id = query.pop("key_id", query.pop("access_key_id", None))
-    secret = query.pop("secret_access_key", query.pop("secret", None))
-    token = query.pop("session_token", None)
-    url_style = query.pop("url_style", None)
-    use_ssl_value = query.pop("use_ssl", None)
-
-    endpoint_use_ssl: bool | None = None
-    if endpoint and "://" in endpoint:
-        endpoint_use_ssl = urlsplit(endpoint).scheme == "https"
-    use_ssl = _parse_bool(use_ssl_value) if use_ssl_value is not None else endpoint_use_ssl
-
-    return S3Storage(
-        bucket=bucket,
-        prefix=unquote(parsed.path.lstrip("/")),
-        endpoint=endpoint,
-        region=region,
-        key_id=key_id,
-        secret_access_key=secret,
-        session_token=token,
-        url_style=url_style,
-        use_ssl=use_ssl,
-        extra_secret_options=query,
-    )
-
-
-def _file_url_path(parsed: SplitResult) -> str:
-    path = unquote(parsed.path)
-    if parsed.netloc and parsed.netloc != "localhost":
-        path = f"//{parsed.netloc}{path}"
-    return path
-
-
-def _parse_bool(value: str) -> bool:
-    normalized = value.lower()
-    if normalized in {"1", "true", "yes", "on"}:
-        return True
-    if normalized in {"0", "false", "no", "off"}:
-        return False
-    raise DuckLakeConfigError(f"invalid boolean value: {value!r}")
 
 
 def _endpoint_host(endpoint: str) -> str:
