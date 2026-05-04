@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, TypeAlias
+from typing import Any
 
 from ducklake_client._connection import ConnectionManager
 from ducklake_client.config import (
@@ -16,9 +16,8 @@ from ducklake_client.config import (
     parse_storage,
     quote_literal,
 )
-from ducklake_client.exceptions import DuckLakeQueryError
-
-QueryParameters: TypeAlias = Mapping[str, object] | Sequence[object] | None
+from ducklake_client._params import QueryParameters, normalize_parameters
+from ducklake_client.transaction import Transaction
 
 _EXTENSION_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
@@ -45,7 +44,7 @@ class DuckLake:
         )
 
     def sql(self, query: str, *parameters: object, **named_parameters: object) -> Any:
-        return self.execute(query, _normalize_parameters(parameters, named_parameters))
+        return self.execute(query, normalize_parameters(parameters, named_parameters))
 
     def execute(self, query: str, parameters: QueryParameters = None) -> Any:
         if parameters is None:
@@ -94,64 +93,3 @@ class DuckLake:
         return getattr(self.raw_connection(), name)
 
 
-class Transaction:
-    """A context-managed DuckDB transaction on a DuckLake connection."""
-
-    def __init__(self, lake: DuckLake) -> None:
-        self._lake = lake
-        self._connection: Any | None = None
-
-    def __enter__(self) -> Transaction:
-        if self._connection is not None:
-            raise RuntimeError("transaction is already active")
-        self._connection = self._lake.raw_connection()
-        self._connection.execute("BEGIN TRANSACTION")
-        return self
-
-    def __exit__(self, exc_type: object, exc: object, traceback: object) -> None:
-        connection = self._connection
-        self._connection = None
-        if connection is None:
-            return
-        if exc_type is None:
-            try:
-                connection.execute("COMMIT")
-            except Exception as commit_exc:
-                try:
-                    connection.execute("ROLLBACK")
-                except Exception:
-                    pass
-                raise DuckLakeQueryError("DuckLake transaction commit failed") from commit_exc
-        else:
-            try:
-                connection.execute("ROLLBACK")
-            except Exception:
-                pass
-
-    def sql(self, query: str, *parameters: object, **named_parameters: object) -> Any:
-        return self.execute(query, _normalize_parameters(parameters, named_parameters))
-
-    def execute(self, query: str, parameters: QueryParameters = None) -> Any:
-        if parameters is None:
-            return self.raw_connection().execute(query)
-        return self.raw_connection().execute(query, parameters)
-
-    def raw_connection(self) -> Any:
-        if self._connection is None:
-            raise RuntimeError("transaction is not active")
-        return self._connection
-
-
-def _normalize_parameters(
-    positional: tuple[object, ...],
-    named: Mapping[str, object],
-) -> QueryParameters:
-    if positional and named:
-        raise TypeError("pass either positional parameters or named parameters, not both")
-    if named:
-        return dict(named)
-    if not positional:
-        return None
-    if len(positional) == 1 and isinstance(positional[0], Mapping):
-        return dict(positional[0])
-    return list(positional)

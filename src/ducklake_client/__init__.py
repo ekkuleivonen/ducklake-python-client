@@ -16,7 +16,8 @@ from ducklake_client.exceptions import (
     DuckLakeError,
     DuckLakeQueryError,
 )
-from ducklake_client.lake import DuckLake, Transaction
+from ducklake_client.lake import DuckLake
+from ducklake_client.transaction import Transaction
 
 __all__ = [
     "CatalogConfig",

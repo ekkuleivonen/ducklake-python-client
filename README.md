@@ -39,6 +39,19 @@ with DuckLake(catalog="metadata.ducklake", storage="data") as lake:
     print(lake.sql("SELECT count(*) FROM lake.main.events").fetchone())
 ```
 
+## Transactions
+
+Use `transaction()` to group statements on the same DuckDB connection. The transaction commits when the context exits normally and rolls back if an exception is raised.
+
+```python
+from ducklake_client import DuckLake
+
+with DuckLake(catalog="metadata.ducklake", storage="data") as lake:
+    with lake.transaction() as tx:
+        tx.execute("CREATE TABLE IF NOT EXISTS lake.main.items (id INTEGER, name VARCHAR)")
+        tx.execute("INSERT INTO lake.main.items VALUES (?, ?)", [1, "example"])
+```
+
 ## Configuration
 
 Local filesystem paths can be passed as plain strings:
