@@ -1,0 +1,18 @@
+[project]
+name = "ducklake-client"
+version = "0.1.0"
+description = "Lightweight wrapper over DuckDB with convenience helpers for DuckLake."
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [
+  "duckdb",
+]
+
+
+authors = [
+  { name = "Ekku Leivonen", email = "ekku.leivonen@gmail.com" }
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
