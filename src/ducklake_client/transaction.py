@@ -8,7 +8,8 @@ from ducklake_client._params import QueryParameters, normalize_parameters
 from ducklake_client.exceptions import DuckLakeQueryError
 from ducklake_client.methods.create_schema import create_schema as create_schema_method
 from ducklake_client.methods.create_table import create_table as create_table_method
-from ducklake_client.schema import ColumnDef
+from ducklake_client.methods.table_info import table_info as table_info_method
+from ducklake_client.schema import ColumnDef, TableInfo
 
 
 class Transaction:
@@ -83,6 +84,22 @@ class Transaction:
             schema_name=schema_name,
             if_not_exists=if_not_exists,
             **columns,
+        )
+
+    def table_info(
+        self,
+        table_name: str,
+        *,
+        schema_name: str = "main",
+        include_row_count: bool = True,
+        include_snapshots: bool = True,
+    ) -> TableInfo:
+        return table_info_method(
+            self,
+            table_name,
+            schema_name=schema_name,
+            include_row_count=include_row_count,
+            include_snapshots=include_snapshots,
         )
 
     def raw_connection(self) -> Any:

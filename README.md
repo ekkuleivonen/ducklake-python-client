@@ -48,7 +48,7 @@ with DuckLake(
 
 ## Methods
 
-Client methods live under `ducklake_client.methods`, with each method in its own directory containing `method.py` and `template.sql`.
+Client methods live under `ducklake_client.methods`, with each method in its own directory. Methods that render larger SQL statements also include `template.sql`.
 
 ```python
 from ducklake_client import ColumnDef, DiskStorage, DuckDBCatalog, DuckLake
@@ -63,6 +63,7 @@ with DuckLake(
         id=ColumnDef("INTEGER", nullable=False),
         name=ColumnDef("VARCHAR"),
     )
+    info = lake.table_info("items")
 ```
 
 ## Transactions

@@ -1,0 +1,1 @@
+SUMMARIZE SELECT * FROM {table_name}

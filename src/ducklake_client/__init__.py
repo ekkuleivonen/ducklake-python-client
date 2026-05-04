@@ -17,7 +17,16 @@ from ducklake_client.exceptions import (
     DuckLakeQueryError,
 )
 from ducklake_client.client import DuckLake
-from ducklake_client.schema import ColumnDataType, ColumnDef
+from ducklake_client.schema import (
+    ColumnDataType,
+    ColumnDef,
+    DuckLakeTableMetadata,
+    TableInfo,
+    TableInfoColumn,
+    TablePartitionSpec,
+    TableSnapshotInfo,
+    TableSortSpec,
+)
 from ducklake_client.transaction import Transaction
 
 __all__ = [
@@ -31,10 +40,16 @@ __all__ = [
     "DuckLakeConnectionError",
     "DuckLakeError",
     "DuckLakeQueryError",
+    "DuckLakeTableMetadata",
     "DiskStorage",
     "PostgresCatalog",
     "S3Storage",
     "SqliteCatalog",
     "StorageConfig",
+    "TableInfo",
+    "TableInfoColumn",
+    "TablePartitionSpec",
+    "TableSnapshotInfo",
+    "TableSortSpec",
     "Transaction",
 ]
