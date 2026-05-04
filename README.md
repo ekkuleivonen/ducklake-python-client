@@ -11,7 +11,7 @@ pip install ducklake-client
 ## Open a DuckLake connection
 
 ```python
-from ducklake_client import DiskStorage, DuckDBCatalog, DuckLake
+from ducklake_client import ColumnDef, DiskStorage, DuckDBCatalog, DuckLake
 
 lake = DuckLake(
     catalog=DuckDBCatalog("metadata.ducklake"),
@@ -19,8 +19,12 @@ lake = DuckLake(
 )
 
 try:
-    lake.execute("CREATE SCHEMA IF NOT EXISTS lake.main")
-    lake.execute("CREATE TABLE IF NOT EXISTS lake.main.items (id INTEGER, name VARCHAR)")
+    lake.create_schema("main")
+    lake.create_table(
+        "items",
+        id=ColumnDef("INTEGER", nullable=False),
+        name=ColumnDef("VARCHAR"),
+    )
     rows = lake.sql("SELECT * FROM lake.main.items").fetchall()
 finally:
     lake.close()
@@ -42,19 +46,43 @@ with DuckLake(
     print(lake.sql("SELECT count(*) FROM lake.main.events").fetchone())
 ```
 
+## Methods
+
+Client methods live under `ducklake_client.methods`, with each method in its own directory containing `method.py` and `template.sql`.
+
+```python
+from ducklake_client import ColumnDef, DiskStorage, DuckDBCatalog, DuckLake
+
+with DuckLake(
+    catalog=DuckDBCatalog("metadata.ducklake"),
+    storage=DiskStorage("data"),
+) as lake:
+    lake.create_schema("main")
+    lake.create_table(
+        "items",
+        id=ColumnDef("INTEGER", nullable=False),
+        name=ColumnDef("VARCHAR"),
+    )
+```
+
 ## Transactions
 
 Use `transaction()` to group statements on the same DuckDB connection. The transaction commits when the context exits normally and rolls back if an exception is raised.
 
 ```python
-from ducklake_client import DiskStorage, DuckDBCatalog, DuckLake
+from ducklake_client import ColumnDef, DiskStorage, DuckDBCatalog, DuckLake
 
 with DuckLake(
     catalog=DuckDBCatalog("metadata.ducklake"),
     storage=DiskStorage("data"),
 ) as lake:
     with lake.transaction() as tx:
-        tx.execute("CREATE TABLE IF NOT EXISTS lake.main.items (id INTEGER, name VARCHAR)")
+        tx.create_schema("main")
+        tx.create_table(
+            "items",
+            id=ColumnDef("INTEGER", nullable=False),
+            name=ColumnDef("VARCHAR"),
+        )
         tx.execute("INSERT INTO lake.main.items VALUES (?, ?)", [1, "example"])
 ```
 

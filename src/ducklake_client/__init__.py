@@ -17,10 +17,13 @@ from ducklake_client.exceptions import (
     DuckLakeQueryError,
 )
 from ducklake_client.client import DuckLake
+from ducklake_client.schema import ColumnDataType, ColumnDef
 from ducklake_client.transaction import Transaction
 
 __all__ = [
     "CatalogConfig",
+    "ColumnDataType",
+    "ColumnDef",
     "DuckDBCatalog",
     "DuckDBConfig",
     "DuckLake",

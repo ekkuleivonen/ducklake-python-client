@@ -17,6 +17,9 @@ from ducklake_client.config import (
     StorageInput,
     quote_literal,
 )
+from ducklake_client.methods.create_schema import create_schema as create_schema_method
+from ducklake_client.methods.create_table import create_table as create_table_method
+from ducklake_client.schema import ColumnDef
 from ducklake_client.transaction import Transaction
 
 _EXTENSION_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
@@ -58,6 +61,34 @@ class DuckLake:
 
     def transaction(self) -> Transaction:
         return Transaction(self)
+
+    def create_schema(
+        self,
+        name: str,
+        *,
+        if_not_exists: bool = True,
+    ) -> Any:
+        return create_schema_method(
+            self,
+            name=name,
+            if_not_exists=if_not_exists,
+        )
+
+    def create_table(
+        self,
+        table_name: str,
+        *,
+        schema_name: str = "main",
+        if_not_exists: bool = True,
+        **columns: ColumnDef,
+    ) -> Any:
+        return create_table_method(
+            self,
+            table_name,
+            schema_name=schema_name,
+            if_not_exists=if_not_exists,
+            **columns,
+        )
 
     def raw_connection(self) -> Any:
         return self._manager.get()

@@ -1,6 +1,6 @@
 """Examples for ducklake-client."""
 
-from ducklake_client import DiskStorage, DuckDBCatalog, DuckLake
+from ducklake_client import ColumnDef, DiskStorage, DuckDBCatalog, DuckLake
 
 
 def main() -> None:
@@ -9,8 +9,12 @@ def main() -> None:
         storage=DiskStorage("demo_data"),
     ) as lake:
         with lake.transaction() as tx:
-            tx.execute("CREATE SCHEMA IF NOT EXISTS lake.main")
-            tx.execute("CREATE TABLE IF NOT EXISTS lake.main.items (id INTEGER, name VARCHAR)")
+            tx.create_schema("main")
+            tx.create_table(
+                "items",
+                id=ColumnDef("INTEGER", nullable=False),
+                name=ColumnDef("VARCHAR"),
+            )
             tx.execute("INSERT INTO lake.main.items VALUES (?, ?)", [1, "example"])
 
         rows = lake.sql("SELECT * FROM lake.main.items ORDER BY id").fetchall()
