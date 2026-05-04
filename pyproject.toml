@@ -23,6 +23,8 @@ packages = ["src/ducklake_client"]
 [tool.hatch.build.targets.wheel.force-include]
 "src/ducklake_client/methods/create_schema/template.sql" = "ducklake_client/methods/create_schema/template.sql"
 "src/ducklake_client/methods/create_table/template.sql" = "ducklake_client/methods/create_table/template.sql"
+"src/ducklake_client/methods/list_tables/template.sql" = "ducklake_client/methods/list_tables/template.sql"
+"src/ducklake_client/methods/list_views/template.sql" = "ducklake_client/methods/list_views/template.sql"
 "src/ducklake_client/methods/table_info/columns.sql" = "ducklake_client/methods/table_info/columns.sql"
 "src/ducklake_client/methods/table_info/duckdb_columns.sql" = "ducklake_client/methods/table_info/duckdb_columns.sql"
 "src/ducklake_client/methods/table_info/duckdb_table.sql" = "ducklake_client/methods/table_info/duckdb_table.sql"

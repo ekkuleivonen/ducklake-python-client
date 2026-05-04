@@ -19,8 +19,10 @@ from ducklake_client.config import (
 )
 from ducklake_client.methods.create_schema import create_schema as create_schema_method
 from ducklake_client.methods.create_table import create_table as create_table_method
+from ducklake_client.methods.list_tables import list_tables as list_tables_method
+from ducklake_client.methods.list_views import list_views as list_views_method
 from ducklake_client.methods.table_info import table_info as table_info_method
-from ducklake_client.schema import ColumnDef, TableInfo
+from ducklake_client.schema import ColumnDef, TableInfo, TableListing, ViewListing
 from ducklake_client.transaction import Transaction
 
 _EXTENSION_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
@@ -62,6 +64,26 @@ class DuckLake:
 
     def transaction(self) -> Transaction:
         return Transaction(self)
+
+    def list_tables(
+        self,
+        *,
+        schema_name: str | None = None,
+    ) -> list[TableListing]:
+        return list_tables_method(
+            self,
+            schema_name=schema_name,
+        )
+
+    def list_views(
+        self,
+        *,
+        schema_name: str | None = None,
+    ) -> list[ViewListing]:
+        return list_views_method(
+            self,
+            schema_name=schema_name,
+        )
 
     def create_schema(
         self,

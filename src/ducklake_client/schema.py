@@ -64,6 +64,28 @@ class ColumnDef:
 
 
 @dataclass(frozen=True)
+class TableListing:
+    """A table-like relation discovered in the DuckLake catalog."""
+
+    catalog_name: str
+    schema_name: str
+    table_name: str
+    qualified_name: str
+    table_type: str
+
+
+@dataclass(frozen=True)
+class ViewListing:
+    """A view discovered in the DuckLake catalog."""
+
+    catalog_name: str
+    schema_name: str
+    view_name: str
+    qualified_name: str
+    table_type: str
+
+
+@dataclass(frozen=True)
 class TableInfoColumn:
     """Column metadata and summary statistics for a DuckLake table."""
 

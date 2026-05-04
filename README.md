@@ -63,6 +63,8 @@ with DuckLake(
         id=ColumnDef("INTEGER", nullable=False),
         name=ColumnDef("VARCHAR"),
     )
+    tables = lake.list_tables()
+    views = lake.list_views()
     info = lake.table_info("items")
 ```
 

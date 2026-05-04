@@ -23,9 +23,11 @@ from ducklake_client.schema import (
     DuckLakeTableMetadata,
     TableInfo,
     TableInfoColumn,
+    TableListing,
     TablePartitionSpec,
     TableSnapshotInfo,
     TableSortSpec,
+    ViewListing,
 )
 from ducklake_client.transaction import Transaction
 
@@ -48,8 +50,10 @@ __all__ = [
     "StorageConfig",
     "TableInfo",
     "TableInfoColumn",
+    "TableListing",
     "TablePartitionSpec",
     "TableSnapshotInfo",
     "TableSortSpec",
     "Transaction",
+    "ViewListing",
 ]
