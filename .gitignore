@@ -6,7 +6,8 @@ dist/
 wheels/
 *.egg-info
 
-demo_data/
+# demo/
+# demo.ducklake/
 
 # Virtual environments
 .venv
