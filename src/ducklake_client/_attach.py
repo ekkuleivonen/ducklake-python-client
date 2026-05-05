@@ -14,7 +14,8 @@ def build_attach_sql(
     alias: str,
     attach_options: Mapping[str, object] | None = None,
 ) -> str:
-    options: dict[str, object] = {"DATA_PATH": storage.data_path()}
+    options: dict[str, object] = dict(catalog.attach_options())
+    options["DATA_PATH"] = storage.data_path()
     if attach_options:
         options.update(attach_options)
     rendered_options = ", ".join(

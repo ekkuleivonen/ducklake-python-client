@@ -17,6 +17,9 @@ class CatalogConfig:
     def attach_uri(self) -> str:
         raise NotImplementedError
 
+    def attach_options(self) -> Mapping[str, object]:
+        return {}
+
     def required_extensions(self) -> tuple[str, ...]:
         return ()
 
@@ -63,6 +66,12 @@ class SqliteCatalog(CatalogConfig):
 
     def attach_uri(self) -> str:
         return f"ducklake:sqlite:{self.path}"
+
+    def attach_options(self) -> Mapping[str, object]:
+        return {
+            "META_JOURNAL_MODE": "WAL",
+            "META_BUSY_TIMEOUT": 5000,
+        }
 
     def required_extensions(self) -> tuple[str, ...]:
         return ("sqlite",)
