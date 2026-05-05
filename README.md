@@ -73,6 +73,20 @@ with DuckLake(
     info = lake.table.info("nl_train_stations")
 ```
 
+## Ad hoc SQL as dict rows
+
+For quick queries with named parameters (DuckDB ``$param`` syntax), use ``sql_dicts``:
+
+```python
+from ducklake_client import DiskStorage, DuckDBCatalog, DuckLake
+
+with DuckLake(
+    catalog=DuckDBCatalog("metadata.ducklake"),
+    storage=DiskStorage("data"),
+) as lake:
+    rows = lake.sql_dicts("SELECT $n AS v", n=41)
+```
+
 ## Transactions
 
 Use `transaction()` to automatically begin, commit, or roll back a block on the native DuckDB connection.

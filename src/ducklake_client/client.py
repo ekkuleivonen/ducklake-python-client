@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from functools import cached_property
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from ducklake_client._connection import ConnectionManager
 from ducklake_client.config import (
@@ -64,6 +64,21 @@ class DuckLake:
     @cached_property
     def view(self) -> ViewModule:
         return ViewModule(self)
+
+    def sql_dicts(self, sql: str, **params: Any) -> list[dict[str, Any]]:
+        """Run arbitrary SQL with named parameters and return rows as dicts.
+
+        Named parameters use DuckDB's ``$name`` syntax. For no parameters, call
+        with only ``sql``.
+        """
+
+        connection = self.connection
+        if params:
+            connection.execute(sql, params)
+        else:
+            connection.execute(sql)
+        columns = [col[0] for col in (connection.description or [])]
+        return [dict(zip(columns, row, strict=False)) for row in connection.fetchall()]
 
     @contextmanager
     def transaction(self) -> Iterator[DuckLake]:
