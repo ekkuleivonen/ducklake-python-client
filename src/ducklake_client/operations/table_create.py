@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import TYPE_CHECKING
 
-from ducklake_client.config import quote_identifier
+from ducklake_client.config import quote_literal
 from ducklake_client.exceptions import DuckLakeConfigError
 from ducklake_client.operations.base import OperationContext, template
+from ducklake_client.operations.table_names import qualified_table_name, split_table_name
 from ducklake_client.schema import ColumnDef
 
 if TYPE_CHECKING:
@@ -15,7 +17,7 @@ if TYPE_CHECKING:
 
 def table_create(
     context: OperationContext,
-    name: str,
+    table_name: str,
     *,
     schema_name: str = "main",
     if_not_exists: bool = True,
@@ -29,27 +31,31 @@ def table_create(
 
     query = template("table_create.sql").format(
         if_not_exists="IF NOT EXISTS " if if_not_exists else "",
-        table_name=_qualified_table_name(context.alias, schema_name, name),
+        table_name=_qualified_name(context.alias, schema_name, table_name),
         columns=",\n    ".join(column.sql(column_name) for column_name, column in columns.items()),
     )
     return context.connection.execute(query)
 
 
-def _qualified_table_name(alias: str, schema_name: str, name: str) -> str:
-    if not name:
-        raise DuckLakeConfigError("table name must not be empty")
-    if not schema_name:
-        raise DuckLakeConfigError("schema name must not be empty")
+def table_create_from_csv(
+    context: OperationContext,
+    name: str,
+    source: str | Path,
+    *,
+    schema_name: str = "main",
+    if_not_exists: bool = True,
+) -> duckdb.DuckDBPyConnection:
+    if not str(source):
+        raise DuckLakeConfigError("CSV source must not be empty")
 
-    parts = name.split(".")
-    if len(parts) == 1:
-        schema = schema_name
-        table = parts[0]
-    elif len(parts) == 2:
-        schema, table = parts
-    else:
-        raise DuckLakeConfigError(f"invalid table name: {name!r}")
+    query = template("table_create_from_csv.sql").format(
+        if_not_exists="IF NOT EXISTS " if if_not_exists else "",
+        table_name=_qualified_name(context.alias, schema_name, name),
+        source=quote_literal(source),
+    )
+    return context.connection.execute(query)
 
-    if not schema or not table:
-        raise DuckLakeConfigError(f"invalid table name: {name!r}")
-    return ".".join(quote_identifier(part) for part in (alias, schema, table))
+
+def _qualified_name(alias: str, schema_name: str, name: str) -> str:
+    schema, table = split_table_name(name, schema_name=schema_name)
+    return qualified_table_name(alias, schema, table)

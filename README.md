@@ -58,19 +58,24 @@ with DuckLake(
     storage=DiskStorage("data"),
 ) as lake:
     lake.schema.create("main")
-    lake.table.create(
-        "items",
-        id=ColumnDef("INTEGER", nullable=False),
-        name=ColumnDef("VARCHAR"),
+    lake.table.create_from_csv(
+        "nl_train_stations",
+        "https://blobs.duckdb.org/nl_stations.csv",
+    )
+    lake.table.comment("nl_train_stations", "Dutch railway stations")
+    lake.table.comment(
+        "nl_train_stations",
+        "Full station name",
+        column_name="name_long",
     )
     tables = lake.table.list()
     views = lake.view.list()
-    info = lake.table.info("items")
+    info = lake.table.info("nl_train_stations")
 ```
 
 ## Transactions
 
-Use DuckDB's native transaction methods on `lake.connection`.
+Use `transaction()` to automatically begin, commit, or roll back a block on the native DuckDB connection.
 
 ```python
 from ducklake_client import ColumnDef, DiskStorage, DuckDBCatalog, DuckLake
@@ -79,8 +84,7 @@ with DuckLake(
     catalog=DuckDBCatalog("metadata.ducklake"),
     storage=DiskStorage("data"),
 ) as lake:
-    lake.connection.begin()
-    try:
+    with lake.transaction():
         lake.schema.create("main")
         lake.table.create(
             "items",
@@ -88,10 +92,6 @@ with DuckLake(
             name=ColumnDef("VARCHAR"),
         )
         lake.connection.execute("INSERT INTO lake.main.items VALUES (?, ?)", [1, "example"])
-        lake.connection.commit()
-    except Exception:
-        lake.connection.rollback()
-        raise
 ```
 
 ## Configuration

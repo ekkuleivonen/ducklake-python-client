@@ -86,6 +86,22 @@ class ViewListing:
 
 
 @dataclass(frozen=True)
+class TableColumnSummary:
+    """DuckDB SUMMARIZE statistics for a single table column."""
+
+    min: str | None = None
+    max: str | None = None
+    approx_unique: str | None = None
+    avg: str | None = None
+    std: str | None = None
+    q25: str | None = None
+    q50: str | None = None
+    q75: str | None = None
+    count: str | None = None
+    null_percentage: str | None = None
+
+
+@dataclass(frozen=True)
 class TableInfoColumn:
     """Column metadata and summary statistics for a DuckLake table."""
 
@@ -95,12 +111,7 @@ class TableInfoColumn:
     ordinal_position: int
     default: str | None = None
     comment: str | None = None
-    min: str | None = None
-    max: str | None = None
-    null_percentage: str | None = None
-    approx_unique: str | None = None
-    count: str | None = None
-    summary: dict[str, str | None] = field(default_factory=dict)
+    summary: TableColumnSummary | None = None
 
 
 @dataclass(frozen=True)

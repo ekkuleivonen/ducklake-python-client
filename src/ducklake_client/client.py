@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
+from contextlib import contextmanager
 from functools import cached_property
 from typing import TYPE_CHECKING
 
@@ -63,6 +64,30 @@ class DuckLake:
     @cached_property
     def view(self) -> ViewModule:
         return ViewModule(self)
+
+    @contextmanager
+    def transaction(self) -> Iterator[DuckLake]:
+        """Run a block inside a DuckDB transaction on this lake's connection."""
+
+        connection = self.connection
+        connection.begin()
+        try:
+            yield self
+        except BaseException:
+            try:
+                connection.rollback()
+            except Exception:
+                pass
+            raise
+        else:
+            try:
+                connection.commit()
+            except Exception:
+                try:
+                    connection.rollback()
+                except Exception:
+                    pass
+                raise
 
     def close(self) -> None:
         self._manager.close()

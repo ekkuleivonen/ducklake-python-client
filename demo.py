@@ -1,29 +1,30 @@
 """Examples for ducklake-client."""
 
-from ducklake_client import ColumnDef, DiskStorage, DuckDBCatalog, DuckLake
+import pprint
+from ducklake_client import DiskStorage, DuckDBCatalog, DuckLake
 
 
 def main() -> None:
     with DuckLake(
         catalog=DuckDBCatalog("demo.ducklake"),
-        storage=DiskStorage("demo_data"),
+        storage=DiskStorage("demo"),
     ) as lake:
-        lake.connection.begin()
-        try:
+        with lake.transaction():
             lake.schema.create("main")
-            lake.table.create(
-                "items",
-                id=ColumnDef("INTEGER", nullable=False),
-                name=ColumnDef("VARCHAR"),
+            lake.table.create_from_csv(
+                "nl_train_stations",
+                "https://blobs.duckdb.org/nl_stations.csv",
             )
-            lake.connection.execute("INSERT INTO lake.main.items VALUES (?, ?)", [1, "example"])
-            lake.connection.commit()
-        except Exception:
-            lake.connection.rollback()
-            raise
+            lake.table.comment("nl_train_stations", "Dutch railway stations")
+            lake.table.comment(
+                "nl_train_stations",
+                "Station ID",
+                column_name="id",
+            )
 
-        rows = lake.connection.sql("SELECT * FROM lake.main.items ORDER BY id").fetchall()
-        print(rows)
+        # rows = lake.connection.sql("SELECT * FROM lake.main.nl_train_stations LIMIT 5").fetchall()
+        info = lake.table.info("nl_train_stations")
+        pprint.pprint(info.columns[0], indent=2)
 
 
 if __name__ == "__main__":
