@@ -1,0 +1,74 @@
+name: release
+
+on:
+  workflow_dispatch:
+    inputs:
+      source:
+        description: "Source ref to release from"
+        required: true
+        default: "main"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source }}
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+
+      - name: Resolve release version
+        id: release
+        shell: bash
+        run: |
+          version="$(python - <<'PY'
+          from pathlib import Path
+          import tomllib
+
+          pyproject = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))
+          print(pyproject["project"]["version"])
+          PY
+          )"
+          branch="release/v${version}"
+          echo "version=${version}" >> "${GITHUB_OUTPUT}"
+          echo "branch=${branch}" >> "${GITHUB_OUTPUT}"
+          echo "Release version: ${version}"
+          echo "Release branch: ${branch}"
+
+      - name: Ensure release branch does not exist
+        shell: bash
+        run: |
+          branch="${{ steps.release.outputs.branch }}"
+          if git ls-remote --exit-code --heads origin "${branch}" >/dev/null 2>&1; then
+            echo "::error::Release branch ${branch} already exists"
+            exit 1
+          fi
+
+      - name: Create release branch
+        shell: bash
+        run: |
+          branch="${{ steps.release.outputs.branch }}"
+          git switch -c "${branch}"
+          git push origin "HEAD:refs/heads/${branch}"
+
+      - name: Build package
+        shell: bash
+        run: |
+          python -m pip install --upgrade build
+          python -m build
+
+      - name: Publish package to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          user: __token__
+          password: ${{ secrets.PYPI_API_TOKEN }}
