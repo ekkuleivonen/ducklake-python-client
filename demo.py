@@ -8,16 +8,21 @@ def main() -> None:
         catalog=DuckDBCatalog("demo.ducklake"),
         storage=DiskStorage("demo_data"),
     ) as lake:
-        with lake.transaction() as tx:
-            tx.create_schema("main")
-            tx.create_table(
+        lake.connection.begin()
+        try:
+            lake.schema.create("main")
+            lake.table.create(
                 "items",
                 id=ColumnDef("INTEGER", nullable=False),
                 name=ColumnDef("VARCHAR"),
             )
-            tx.execute("INSERT INTO lake.main.items VALUES (?, ?)", [1, "example"])
+            lake.connection.execute("INSERT INTO lake.main.items VALUES (?, ?)", [1, "example"])
+            lake.connection.commit()
+        except Exception:
+            lake.connection.rollback()
+            raise
 
-        rows = lake.sql("SELECT * FROM lake.main.items ORDER BY id").fetchall()
+        rows = lake.connection.sql("SELECT * FROM lake.main.items ORDER BY id").fetchall()
         print(rows)
 
 

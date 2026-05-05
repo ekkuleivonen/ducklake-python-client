@@ -1,1 +1,0 @@
-"""DuckLake client method implementations."""

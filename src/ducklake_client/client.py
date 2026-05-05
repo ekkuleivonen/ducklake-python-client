@@ -2,30 +2,24 @@
 
 from __future__ import annotations
 
-import re
 from collections.abc import Mapping
-from pathlib import Path
-from typing import Any
+from functools import cached_property
+from typing import TYPE_CHECKING
 
 from ducklake_client._connection import ConnectionManager
-from ducklake_client._params import QueryParameters, normalize_parameters
 from ducklake_client.config import (
     CatalogConfig,
     CatalogInput,
     DuckDBConfig,
     StorageConfig,
     StorageInput,
-    quote_literal,
 )
-from ducklake_client.methods.create_schema import create_schema as create_schema_method
-from ducklake_client.methods.create_table import create_table as create_table_method
-from ducklake_client.methods.list_tables import list_tables as list_tables_method
-from ducklake_client.methods.list_views import list_views as list_views_method
-from ducklake_client.methods.table_info import table_info as table_info_method
-from ducklake_client.schema import ColumnDef, TableInfo, TableListing, ViewListing
-from ducklake_client.transaction import Transaction
+from ducklake_client.modules.schema import SchemaModule
+from ducklake_client.modules.table import TableModule
+from ducklake_client.modules.view import ViewModule
 
-_EXTENSION_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+if TYPE_CHECKING:
+    import duckdb
 
 
 class DuckLake:
@@ -54,115 +48,28 @@ class DuckLake:
             attach_options=attach_options,
         )
 
-    def sql(self, query: str, *parameters: object, **named_parameters: object) -> Any:
-        return self.execute(query, normalize_parameters(parameters, named_parameters))
-
-    def execute(self, query: str, parameters: QueryParameters = None) -> Any:
-        if parameters is None:
-            return self.raw_connection().execute(query)
-        return self.raw_connection().execute(query, parameters)
-
-    def transaction(self) -> Transaction:
-        return Transaction(self)
-
-    def list_tables(
-        self,
-        *,
-        schema_name: str | None = None,
-    ) -> list[TableListing]:
-        return list_tables_method(
-            self,
-            schema_name=schema_name,
-        )
-
-    def list_views(
-        self,
-        *,
-        schema_name: str | None = None,
-    ) -> list[ViewListing]:
-        return list_views_method(
-            self,
-            schema_name=schema_name,
-        )
-
-    def create_schema(
-        self,
-        name: str,
-        *,
-        if_not_exists: bool = True,
-    ) -> Any:
-        return create_schema_method(
-            self,
-            name=name,
-            if_not_exists=if_not_exists,
-        )
-
-    def create_table(
-        self,
-        table_name: str,
-        *,
-        schema_name: str = "main",
-        if_not_exists: bool = True,
-        **columns: ColumnDef,
-    ) -> Any:
-        return create_table_method(
-            self,
-            table_name,
-            schema_name=schema_name,
-            if_not_exists=if_not_exists,
-            **columns,
-        )
-
-    def table_info(
-        self,
-        table_name: str,
-        *,
-        schema_name: str = "main",
-        include_row_count: bool = True,
-        include_snapshots: bool = True,
-    ) -> TableInfo:
-        return table_info_method(
-            self,
-            table_name,
-            schema_name=schema_name,
-            include_row_count=include_row_count,
-            include_snapshots=include_snapshots,
-        )
-
-    def raw_connection(self) -> Any:
+    @property
+    def connection(self) -> duckdb.DuckDBPyConnection:
         return self._manager.get()
+
+    @cached_property
+    def schema(self) -> SchemaModule:
+        return SchemaModule(self)
+
+    @cached_property
+    def table(self) -> TableModule:
+        return TableModule(self)
+
+    @cached_property
+    def view(self) -> ViewModule:
+        return ViewModule(self)
 
     def close(self) -> None:
         self._manager.close()
 
-    def load_extension(
-        self,
-        name: str | None = None,
-        *,
-        path: str | Path | None = None,
-        install: bool = True,
-    ) -> None:
-        """Install and/or load a DuckDB extension into this lake's connection."""
-
-        if (name is None) == (path is None):
-            raise ValueError("provide exactly one of `name` or `path`")
-        connection = self.raw_connection()
-        if path is not None:
-            connection.execute(f"LOAD {quote_literal(str(Path(path)))}")
-            return
-        assert name is not None
-        if not _EXTENSION_NAME.fullmatch(name):
-            raise ValueError(f"invalid DuckDB extension name: {name!r}")
-        if install:
-            connection.execute(f"INSTALL {name}")
-        connection.execute(f"LOAD {name}")
-
     def __enter__(self) -> DuckLake:
-        self.raw_connection()
+        self.connection
         return self
 
     def __exit__(self, exc_type: object, exc: object, traceback: object) -> None:
         self.close()
-
-    def __getattr__(self, name: str) -> Any:
-        return getattr(self.raw_connection(), name)

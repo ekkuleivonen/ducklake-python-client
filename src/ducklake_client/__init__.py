@@ -17,6 +17,7 @@ from ducklake_client.exceptions import (
     DuckLakeQueryError,
 )
 from ducklake_client.client import DuckLake
+from ducklake_client.modules import SchemaModule, TableModule, ViewModule
 from ducklake_client.schema import (
     ColumnDataType,
     ColumnDef,
@@ -29,7 +30,6 @@ from ducklake_client.schema import (
     TableSortSpec,
     ViewListing,
 )
-from ducklake_client.transaction import Transaction
 
 __all__ = [
     "CatalogConfig",
@@ -46,14 +46,16 @@ __all__ = [
     "DiskStorage",
     "PostgresCatalog",
     "S3Storage",
+    "SchemaModule",
     "SqliteCatalog",
     "StorageConfig",
     "TableInfo",
     "TableInfoColumn",
     "TableListing",
+    "TableModule",
     "TablePartitionSpec",
     "TableSnapshotInfo",
     "TableSortSpec",
-    "Transaction",
+    "ViewModule",
     "ViewListing",
 ]

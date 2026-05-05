@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Any, cast
+from typing import TYPE_CHECKING, cast
 
 from ducklake_client._attach import build_attach_sql
 from ducklake_client.config import (
@@ -17,6 +17,9 @@ from ducklake_client.config import (
 )
 from ducklake_client.exceptions import DuckLakeConnectionError
 
+if TYPE_CHECKING:
+    import duckdb
+
 _SETTING_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 
@@ -27,9 +30,9 @@ class ConnectionManager:
     alias: str
     duckdb: DuckDBConfig = field(default_factory=DuckDBConfig)
     attach_options: Mapping[str, object] | None = None
-    _connection: Any | None = field(default=None, init=False, repr=False)
+    _connection: duckdb.DuckDBPyConnection | None = field(default=None, init=False, repr=False)
 
-    def get(self) -> Any:
+    def get(self) -> duckdb.DuckDBPyConnection:
         if self._connection is None:
             self._connection = self._connect()
         return self._connection
@@ -39,7 +42,7 @@ class ConnectionManager:
             self._connection.close()
             self._connection = None
 
-    def _connect(self) -> Any:
+    def _connect(self) -> duckdb.DuckDBPyConnection:
         try:
             import duckdb
 
@@ -53,8 +56,8 @@ class ConnectionManager:
                 conn.execute(_setting_sql(name, value))
             for extension in self._required_extensions():
                 if self.duckdb.install_extensions:
-                    conn.execute(f"INSTALL {extension}")
-                conn.execute(f"LOAD {extension}")
+                    conn.install_extension(extension)
+                conn.load_extension(extension)
             for statement in self.storage.setup_statements(secret_name=f"{self.alias}_storage"):
                 conn.execute(statement)
             conn.execute(

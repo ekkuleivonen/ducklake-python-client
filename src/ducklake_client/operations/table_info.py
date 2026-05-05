@@ -1,12 +1,12 @@
-"""Implementation for collecting DuckLake table metadata."""
+"""Collect DuckLake table metadata."""
 
 from __future__ import annotations
 
-from importlib.resources import files
 from typing import Any
 
 from ducklake_client.config import quote_identifier
-from ducklake_client.exceptions import DuckLakeConfigError, DuckLakeQueryError
+from ducklake_client.exceptions import DuckLakeConfigError
+from ducklake_client.operations.base import OperationContext, optional_rows, rows, template
 from ducklake_client.schema import (
     DuckLakeTableMetadata,
     TableInfo,
@@ -18,45 +18,46 @@ from ducklake_client.schema import (
 
 
 def table_info(
-    client: Any,
-    table_name: str,
+    context: OperationContext,
+    name: str,
     *,
     schema_name: str = "main",
     include_row_count: bool = True,
     include_snapshots: bool = True,
 ) -> TableInfo:
-    """Return consolidated metadata and summary statistics for a DuckLake table."""
-
-    schema, table = _split_table_name(table_name, schema_name=schema_name)
-    params = {"catalog": client.alias, "schema": schema, "table": table}
-    table_record = _require_table(client, params)
-    duckdb_table_record = _duckdb_table_record(client, params)
-    duckdb_column_comments = _duckdb_column_comments(client, params)
-    summary_by_name = _summary_by_column(client, client.alias, schema, table)
-    row_count = _row_count(client, client.alias, schema, table) if include_row_count else None
+    schema, table = _split_table_name(name, schema_name=schema_name)
+    parameters = {"catalog": context.alias, "schema": schema, "table": table}
+    table_record = _require_table(context, parameters)
+    duckdb_table_record = _duckdb_table_record(context, parameters)
+    duckdb_column_comments = _duckdb_column_comments(context, parameters)
+    summary_by_name = _summary_by_column(context, context.alias, schema, table)
+    row_count = (
+        _row_count(context, context.alias, schema, table) if include_row_count else None
+    )
 
     columns = [
         _column_info(row, duckdb_column_comments.get(str(row["column_name"]), {}), summary_by_name)
-        for row in _information_schema_columns(client, params)
+        for row in _information_schema_columns(context, parameters)
     ]
 
-    ducklake_metadata = _ducklake_metadata(client, params)
     return TableInfo(
-        catalog_name=str(client.alias),
+        catalog_name=str(context.alias),
         schema_name=schema,
         table_name=table,
-        qualified_name=_qualified_table_name(client.alias, schema, table),
+        qualified_name=_qualified_table_name(context.alias, schema, table),
         table_type=str(table_record["table_type"]),
         columns=columns,
         row_count=row_count,
         estimated_size=_int_or_none(duckdb_table_record.get("estimated_size"))
         if duckdb_table_record
         else None,
-        table_comment=_str_or_none(duckdb_table_record.get("comment")) if duckdb_table_record else None,
-        partition_specs=_partition_specs(client, params),
-        sort_specs=_sort_specs(client, params),
-        ducklake_metadata=ducklake_metadata,
-        snapshots=_snapshots(client, client.alias) if include_snapshots else [],
+        table_comment=_str_or_none(duckdb_table_record.get("comment"))
+        if duckdb_table_record
+        else None,
+        partition_specs=_partition_specs(context, parameters),
+        sort_specs=_sort_specs(context, parameters),
+        ducklake_metadata=_ducklake_metadata(context, parameters),
+        snapshots=_snapshots(context, context.alias) if include_snapshots else [],
     )
 
 
@@ -78,58 +79,87 @@ def _split_table_name(name: str, *, schema_name: str) -> tuple[str, str]:
     raise DuckLakeConfigError(f"invalid table name: {name!r}")
 
 
-def _require_table(client: Any, params: dict[str, object]) -> dict[str, Any]:
-    rows = _rows(client, _template("table.sql"), params)
-    if not rows:
-        qualified = f"{params['schema']}.{params['table']}"
+def _require_table(
+    context: OperationContext, parameters: dict[str, object]
+) -> dict[str, Any]:
+    result = rows(
+        context,
+        template("table_info_table.sql"),
+        parameters,
+        operation="table.info",
+    )
+    if not result:
+        qualified = f"{parameters['schema']}.{parameters['table']}"
         raise DuckLakeConfigError(f"table not found: {qualified}")
-    return rows[0]
+    return result[0]
 
 
-def _information_schema_columns(client: Any, params: dict[str, object]) -> list[dict[str, Any]]:
-    return _rows(client, _template("columns.sql"), params)
+def _information_schema_columns(
+    context: OperationContext, parameters: dict[str, object]
+) -> list[dict[str, Any]]:
+    return rows(
+        context,
+        template("table_info_columns.sql"),
+        parameters,
+        operation="table.info",
+    )
 
 
-def _duckdb_table_record(client: Any, params: dict[str, object]) -> dict[str, Any]:
-    rows = _optional_rows(client, _template("duckdb_table.sql"), params)
-    return rows[0] if rows else {}
+def _duckdb_table_record(
+    context: OperationContext, parameters: dict[str, object]
+) -> dict[str, Any]:
+    result = optional_rows(
+        context,
+        template("table_info_duckdb_table.sql"),
+        parameters,
+        operation="table.info",
+    )
+    return result[0] if result else {}
 
 
 def _duckdb_column_comments(
-    client: Any, params: dict[str, object]
+    context: OperationContext, parameters: dict[str, object]
 ) -> dict[str, dict[str, Any]]:
-    rows = _optional_rows(client, _template("duckdb_columns.sql"), params)
-    return {str(row["column_name"]): row for row in rows if row.get("column_name") is not None}
+    result = optional_rows(
+        context,
+        template("table_info_duckdb_columns.sql"),
+        parameters,
+        operation="table.info",
+    )
+    return {str(row["column_name"]): row for row in result if row.get("column_name") is not None}
 
 
 def _summary_by_column(
-    client: Any, catalog: str, schema: str, table: str
+    context: OperationContext, catalog: str, schema: str, table: str
 ) -> dict[str, dict[str, str | None]]:
-    rows = _optional_rows(
-        client,
-        _template("summary.sql").format(table_name=_qualified_table_name(catalog, schema, table)),
-        None,
-    )
-    result: dict[str, dict[str, str | None]] = {}
-    for row in rows:
-        name = row.get("column_name")
-        if name is None:
-            continue
-        result[str(name)] = {key: _str_or_none(value) for key, value in row.items()}
-    return result
-
-
-def _row_count(client: Any, catalog: str, schema: str, table: str) -> int | None:
-    rows = _optional_rows(
-        client,
-        _template("row_count.sql").format(
+    result = optional_rows(
+        context,
+        template("table_info_summary.sql").format(
             table_name=_qualified_table_name(catalog, schema, table)
         ),
-        None,
+        operation="table.info",
     )
-    if not rows:
+    summary: dict[str, dict[str, str | None]] = {}
+    for row in result:
+        name = row.get("column_name")
+        if name is not None:
+            summary[str(name)] = {key: _str_or_none(value) for key, value in row.items()}
+    return summary
+
+
+def _row_count(
+    context: OperationContext, catalog: str, schema: str, table: str
+) -> int | None:
+    result = optional_rows(
+        context,
+        template("table_info_row_count.sql").format(
+            table_name=_qualified_table_name(catalog, schema, table)
+        ),
+        operation="table.info",
+    )
+    if not result:
         return None
-    return _int_or_none(rows[0].get("row_count"))
+    return _int_or_none(result[0].get("row_count"))
 
 
 def _column_info(
@@ -155,11 +185,18 @@ def _column_info(
     )
 
 
-def _ducklake_metadata(client: Any, params: dict[str, object]) -> DuckLakeTableMetadata | None:
-    rows = _optional_rows(client, _template("ducklake_metadata.sql"), params)
-    if not rows:
+def _ducklake_metadata(
+    context: OperationContext, parameters: dict[str, object]
+) -> DuckLakeTableMetadata | None:
+    result = optional_rows(
+        context,
+        template("table_info_ducklake_metadata.sql"),
+        parameters,
+        operation="table.info",
+    )
+    if not result:
         return None
-    row = rows[0]
+    row = result[0]
     return DuckLakeTableMetadata(
         table_id=_int_or_none(row.get("table_id")),
         table_uuid=_str_or_none(row.get("table_uuid")),
@@ -174,8 +211,9 @@ def _ducklake_metadata(client: Any, params: dict[str, object]) -> DuckLakeTableM
     )
 
 
-def _partition_specs(client: Any, params: dict[str, object]) -> list[TablePartitionSpec]:
-    rows = _optional_rows(client, _template("partition_specs.sql"), params)
+def _partition_specs(
+    context: OperationContext, parameters: dict[str, object]
+) -> list[TablePartitionSpec]:
     return [
         TablePartitionSpec(
             partition_id=_int_or_none(row.get("partition_id")),
@@ -184,12 +222,18 @@ def _partition_specs(client: Any, params: dict[str, object]) -> list[TablePartit
             column_name=_str_or_none(row.get("column_name")),
             transform=_str_or_none(row.get("transform")),
         )
-        for row in rows
+        for row in optional_rows(
+            context,
+            template("table_info_partition_specs.sql"),
+            parameters,
+            operation="table.info",
+        )
     ]
 
 
-def _sort_specs(client: Any, params: dict[str, object]) -> list[TableSortSpec]:
-    rows = _optional_rows(client, _template("sort_specs.sql"), params)
+def _sort_specs(
+    context: OperationContext, parameters: dict[str, object]
+) -> list[TableSortSpec]:
     return [
         TableSortSpec(
             sort_id=_int_or_none(row.get("sort_id")),
@@ -199,17 +243,22 @@ def _sort_specs(client: Any, params: dict[str, object]) -> list[TableSortSpec]:
             sort_direction=_str_or_none(row.get("sort_direction")),
             null_order=_str_or_none(row.get("null_order")),
         )
-        for row in rows
+        for row in optional_rows(
+            context,
+            template("table_info_sort_specs.sql"),
+            parameters,
+            operation="table.info",
+        )
     ]
 
 
-def _snapshots(client: Any, catalog: str) -> list[TableSnapshotInfo]:
-    rows = _optional_rows(
-        client,
-        _template("snapshots.sql").format(
+def _snapshots(context: OperationContext, catalog: str) -> list[TableSnapshotInfo]:
+    result = optional_rows(
+        context,
+        template("table_info_snapshots.sql").format(
             snapshots_function=f"{quote_identifier(catalog)}.snapshots()"
         ),
-        None,
+        operation="table.info",
     )
     return [
         TableSnapshotInfo(
@@ -223,39 +272,13 @@ def _snapshots(client: Any, catalog: str) -> list[TableSnapshotInfo]:
             commit_message=_str_or_none(row.get("commit_message")),
             commit_extra_info=_str_or_none(row.get("commit_extra_info")),
         )
-        for row in rows
+        for row in result
         if row.get("snapshot_id") is not None
     ]
 
 
-def _rows(client: Any, query: str, parameters: dict[str, object] | None) -> list[dict[str, Any]]:
-    try:
-        cursor = client.execute(query, parameters) if parameters is not None else client.execute(query)
-        names = [str(column[0]) for column in cursor.description or []]
-        return [dict(zip(names, row, strict=False)) for row in cursor.fetchall()]
-    except Exception as exc:
-        raise DuckLakeQueryError("DuckLake table_info query failed") from exc
-
-
-def _optional_rows(
-    client: Any, query: str, parameters: dict[str, object] | None
-) -> list[dict[str, Any]]:
-    try:
-        return _rows(client, query, parameters)
-    except DuckLakeQueryError:
-        return []
-
-
 def _qualified_table_name(catalog: str, schema: str, table: str) -> str:
     return ".".join(quote_identifier(part) for part in (catalog, schema, table))
-
-
-def _template(name: str) -> str:
-    return (
-        files("ducklake_client.methods.table_info")
-        .joinpath(name)
-        .read_text(encoding="utf-8")
-    )
 
 
 def _str_or_none(value: object) -> str | None:

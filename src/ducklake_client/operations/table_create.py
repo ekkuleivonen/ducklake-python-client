@@ -1,40 +1,38 @@
-"""Implementation for creating DuckLake tables."""
+"""Create DuckLake tables."""
 
 from __future__ import annotations
 
-from importlib.resources import files
-from typing import Any
+from typing import TYPE_CHECKING
 
 from ducklake_client.config import quote_identifier
 from ducklake_client.exceptions import DuckLakeConfigError
+from ducklake_client.operations.base import OperationContext, template
 from ducklake_client.schema import ColumnDef
 
+if TYPE_CHECKING:
+    import duckdb
 
-def create_table(
-    client: Any,
-    table_name: str,
+
+def table_create(
+    context: OperationContext,
+    name: str,
+    *,
     schema_name: str = "main",
     if_not_exists: bool = True,
     **columns: ColumnDef,
-) -> Any:
-    """Create a table in the attached DuckLake catalog."""
-
+) -> duckdb.DuckDBPyConnection:
     if not columns:
-        raise DuckLakeConfigError("create_table requires at least one column")
+        raise DuckLakeConfigError("table.create requires at least one column")
     for column_name, column in columns.items():
         if not isinstance(column, ColumnDef):
             raise TypeError(f"column {column_name!r} must be a ColumnDef")
 
-    qualified_table_name = _qualified_table_name(client.alias, schema_name, table_name)
-    rendered_columns = ",\n    ".join(
-        column.sql(column_name) for column_name, column in columns.items()
-    )
-    sql = _template().format(
+    query = template("table_create.sql").format(
         if_not_exists="IF NOT EXISTS " if if_not_exists else "",
-        table_name=qualified_table_name,
-        columns=rendered_columns,
+        table_name=_qualified_table_name(context.alias, schema_name, name),
+        columns=",\n    ".join(column.sql(column_name) for column_name, column in columns.items()),
     )
-    return client.execute(sql)
+    return context.connection.execute(query)
 
 
 def _qualified_table_name(alias: str, schema_name: str, name: str) -> str:
@@ -55,11 +53,3 @@ def _qualified_table_name(alias: str, schema_name: str, name: str) -> str:
     if not schema or not table:
         raise DuckLakeConfigError(f"invalid table name: {name!r}")
     return ".".join(quote_identifier(part) for part in (alias, schema, table))
-
-
-def _template() -> str:
-    return (
-        files("ducklake_client.methods.create_table")
-        .joinpath("template.sql")
-        .read_text(encoding="utf-8")
-    )

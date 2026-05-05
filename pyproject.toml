@@ -21,17 +21,4 @@ build-backend = "hatchling.build"
 packages = ["src/ducklake_client"]
 
 [tool.hatch.build.targets.wheel.force-include]
-"src/ducklake_client/methods/create_schema/template.sql" = "ducklake_client/methods/create_schema/template.sql"
-"src/ducklake_client/methods/create_table/template.sql" = "ducklake_client/methods/create_table/template.sql"
-"src/ducklake_client/methods/list_tables/template.sql" = "ducklake_client/methods/list_tables/template.sql"
-"src/ducklake_client/methods/list_views/template.sql" = "ducklake_client/methods/list_views/template.sql"
-"src/ducklake_client/methods/table_info/columns.sql" = "ducklake_client/methods/table_info/columns.sql"
-"src/ducklake_client/methods/table_info/duckdb_columns.sql" = "ducklake_client/methods/table_info/duckdb_columns.sql"
-"src/ducklake_client/methods/table_info/duckdb_table.sql" = "ducklake_client/methods/table_info/duckdb_table.sql"
-"src/ducklake_client/methods/table_info/ducklake_metadata.sql" = "ducklake_client/methods/table_info/ducklake_metadata.sql"
-"src/ducklake_client/methods/table_info/partition_specs.sql" = "ducklake_client/methods/table_info/partition_specs.sql"
-"src/ducklake_client/methods/table_info/row_count.sql" = "ducklake_client/methods/table_info/row_count.sql"
-"src/ducklake_client/methods/table_info/snapshots.sql" = "ducklake_client/methods/table_info/snapshots.sql"
-"src/ducklake_client/methods/table_info/sort_specs.sql" = "ducklake_client/methods/table_info/sort_specs.sql"
-"src/ducklake_client/methods/table_info/summary.sql" = "ducklake_client/methods/table_info/summary.sql"
-"src/ducklake_client/methods/table_info/table.sql" = "ducklake_client/methods/table_info/table.sql"
+"src/ducklake_client/templates" = "ducklake_client/templates"

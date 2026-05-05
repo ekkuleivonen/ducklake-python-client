@@ -19,18 +19,18 @@ lake = DuckLake(
 )
 
 try:
-    lake.create_schema("main")
-    lake.create_table(
+    lake.schema.create("main")
+    lake.table.create(
         "items",
         id=ColumnDef("INTEGER", nullable=False),
         name=ColumnDef("VARCHAR"),
     )
-    rows = lake.sql("SELECT * FROM lake.main.items").fetchall()
+    rows = lake.connection.sql("SELECT * FROM lake.main.items").fetchall()
 finally:
     lake.close()
 ```
 
-`DuckLake` opens the underlying DuckDB connection lazily on first use. The wrapper installs and loads the DuckDB `ducklake` and `parquet` extensions, attaches the catalog as `lake`, and exposes the raw DuckDB connection through `raw_connection()`.
+`DuckLake` opens the underlying DuckDB connection lazily on first use. The client installs and loads the DuckDB `ducklake` and `parquet` extensions, attaches the catalog as `lake`, and exposes the native DuckDB connection through `connection`.
 
 ## Context manager usage
 
@@ -41,14 +41,14 @@ with DuckLake(
     catalog=DuckDBCatalog("metadata.ducklake"),
     storage=DiskStorage("data"),
 ) as lake:
-    lake.execute("CREATE TABLE IF NOT EXISTS lake.main.events (id INTEGER)")
-    lake.execute("INSERT INTO lake.main.events VALUES (?)", [1])
-    print(lake.sql("SELECT count(*) FROM lake.main.events").fetchone())
+    lake.connection.execute("CREATE TABLE IF NOT EXISTS lake.main.events (id INTEGER)")
+    lake.connection.execute("INSERT INTO lake.main.events VALUES (?)", [1])
+    print(lake.connection.sql("SELECT count(*) FROM lake.main.events").fetchone())
 ```
 
-## Methods
+## Modules
 
-Client methods live under `ducklake_client.methods`, with each method in its own directory. Methods that render larger SQL statements also include `template.sql`.
+DuckLake-specific helpers are grouped into modules. Native DuckDB behavior stays on `lake.connection`.
 
 ```python
 from ducklake_client import ColumnDef, DiskStorage, DuckDBCatalog, DuckLake
@@ -57,20 +57,20 @@ with DuckLake(
     catalog=DuckDBCatalog("metadata.ducklake"),
     storage=DiskStorage("data"),
 ) as lake:
-    lake.create_schema("main")
-    lake.create_table(
+    lake.schema.create("main")
+    lake.table.create(
         "items",
         id=ColumnDef("INTEGER", nullable=False),
         name=ColumnDef("VARCHAR"),
     )
-    tables = lake.list_tables()
-    views = lake.list_views()
-    info = lake.table_info("items")
+    tables = lake.table.list()
+    views = lake.view.list()
+    info = lake.table.info("items")
 ```
 
 ## Transactions
 
-Use `transaction()` to group statements on the same DuckDB connection. The transaction commits when the context exits normally and rolls back if an exception is raised.
+Use DuckDB's native transaction methods on `lake.connection`.
 
 ```python
 from ducklake_client import ColumnDef, DiskStorage, DuckDBCatalog, DuckLake
@@ -79,14 +79,19 @@ with DuckLake(
     catalog=DuckDBCatalog("metadata.ducklake"),
     storage=DiskStorage("data"),
 ) as lake:
-    with lake.transaction() as tx:
-        tx.create_schema("main")
-        tx.create_table(
+    lake.connection.begin()
+    try:
+        lake.schema.create("main")
+        lake.table.create(
             "items",
             id=ColumnDef("INTEGER", nullable=False),
             name=ColumnDef("VARCHAR"),
         )
-        tx.execute("INSERT INTO lake.main.items VALUES (?, ?)", [1, "example"])
+        lake.connection.execute("INSERT INTO lake.main.items VALUES (?, ?)", [1, "example"])
+        lake.connection.commit()
+    except Exception:
+        lake.connection.rollback()
+        raise
 ```
 
 ## Configuration
