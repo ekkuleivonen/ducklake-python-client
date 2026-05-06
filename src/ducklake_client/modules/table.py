@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from ducklake_client.modules.base import DuckLakeModule
+from ducklake_client.operations.table_alter import table_add_column, table_drop_column
 from ducklake_client.operations.table_comment import table_comment
 from ducklake_client.operations.table_create import table_create, table_create_from_csv
 from ducklake_client.operations.table_info import table_info
@@ -50,6 +51,33 @@ class TableModule(DuckLakeModule):
             schema_name=schema_name,
             if_not_exists=if_not_exists,
         )
+
+    def add_column(
+        self,
+        name: str,
+        column_name: str,
+        column: ColumnDef,
+        *,
+        schema_name: str = "main",
+        default_sql: str | None = None,
+    ) -> duckdb.DuckDBPyConnection:
+        return table_add_column(
+            self,
+            name,
+            column_name,
+            column,
+            schema_name=schema_name,
+            default_sql=default_sql,
+        )
+
+    def drop_column(
+        self,
+        name: str,
+        column_name: str,
+        *,
+        schema_name: str = "main",
+    ) -> duckdb.DuckDBPyConnection:
+        return table_drop_column(self, name, column_name, schema_name=schema_name)
 
     def comment(
         self,

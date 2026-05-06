@@ -1,5 +1,6 @@
 """Lightweight Python helpers for DuckLake connections."""
 
+from ducklake_client.client import DuckLake
 from ducklake_client.config import (
     CatalogConfig,
     DiskStorage,
@@ -16,8 +17,7 @@ from ducklake_client.exceptions import (
     DuckLakeError,
     DuckLakeQueryError,
 )
-from ducklake_client.client import DuckLake
-from ducklake_client.modules import SchemaModule, TableModule, ViewModule
+from ducklake_client.modules import SchemaModule, SnapshotsModule, TableModule, ViewModule
 from ducklake_client.schema import (
     ColumnDataType,
     ColumnDef,
@@ -48,6 +48,7 @@ __all__ = [
     "PostgresCatalog",
     "S3Storage",
     "SchemaModule",
+    "SnapshotsModule",
     "SqliteCatalog",
     "StorageConfig",
     "TableColumnSummary",

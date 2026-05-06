@@ -15,7 +15,9 @@ from ducklake_client.config import (
     StorageConfig,
     StorageInput,
 )
+from ducklake_client.exceptions import DuckLakeQueryError
 from ducklake_client.modules.schema import SchemaModule
+from ducklake_client.modules.snapshots import SnapshotsModule
 from ducklake_client.modules.table import TableModule
 from ducklake_client.modules.view import ViewModule
 
@@ -58,6 +60,10 @@ class DuckLake:
         return SchemaModule(self)
 
     @cached_property
+    def snapshots(self) -> SnapshotsModule:
+        return SnapshotsModule(self)
+
+    @cached_property
     def table(self) -> TableModule:
         return TableModule(self)
 
@@ -79,6 +85,47 @@ class DuckLake:
             connection.execute(sql)
         columns = [col[0] for col in (connection.description or [])]
         return [dict(zip(columns, row, strict=False)) for row in connection.fetchall()]
+
+    def sql_scalar(self, sql: str, **params: Any) -> Any:
+        """Run SQL with optional ``$name`` parameters and return a single scalar cell."""
+
+        connection = self.connection
+        try:
+            if params:
+                connection.execute(sql, params)
+            else:
+                connection.execute(sql)
+            row = connection.fetchone()
+        except DuckLakeQueryError:
+            raise
+        except Exception as exc:
+            raise DuckLakeQueryError("DuckLake sql_scalar failed") from exc
+        if row is None:
+            raise DuckLakeQueryError("sql_scalar expected one row, got zero rows")
+        if len(row) != 1:
+            raise DuckLakeQueryError(f"sql_scalar expected exactly one column, got {len(row)}")
+        return row[0]
+
+    def sql_one(self, sql: str, **params: Any) -> dict[str, Any]:
+        """Run SQL with optional ``$name`` parameters and return exactly one row as a dict."""
+
+        connection = self.connection
+        try:
+            if params:
+                connection.execute(sql, params)
+            else:
+                connection.execute(sql)
+            columns = [col[0] for col in (connection.description or [])]
+            row = connection.fetchone()
+        except DuckLakeQueryError:
+            raise
+        except Exception as exc:
+            raise DuckLakeQueryError("DuckLake sql_one failed") from exc
+        if row is None:
+            raise DuckLakeQueryError("sql_one expected one row, got zero rows")
+        if connection.fetchone() is not None:
+            raise DuckLakeQueryError("sql_one expected one row, got multiple rows")
+        return dict(zip(columns, row, strict=False))
 
     @contextmanager
     def transaction(self) -> Iterator[DuckLake]:
@@ -108,7 +155,7 @@ class DuckLake:
         self._manager.close()
 
     def __enter__(self) -> DuckLake:
-        self.connection
+        _ = self.connection
         return self
 
     def __exit__(self, exc_type: object, exc: object, traceback: object) -> None:
