@@ -3,7 +3,7 @@ name = "ducklake-client"
 version = "0.5.1"
 description = "Lightweight wrapper over DuckDB with convenience helpers for DuckLake."
 readme = "README.md"
-requires-python = ">=3.14"
+requires-python = ">=3.11"
 dependencies = [
   "duckdb",
 ]
