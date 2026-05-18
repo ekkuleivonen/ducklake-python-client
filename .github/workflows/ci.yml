@@ -1,0 +1,44 @@
+name: ci
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  package-check:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version:
+          - "3.11"
+          - "3.12"
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install build tooling and package
+        shell: bash
+        run: |
+          python -m pip install --upgrade pip build
+          python -m pip install .
+
+      - name: Verify source compiles
+        shell: bash
+        run: python -m compileall src
+
+      - name: Verify package builds
+        shell: bash
+        run: python -m build
+
+      - name: Verify top-level import
+        shell: bash
+        run: python -c "import ducklake_client; print(ducklake_client.DuckLake.__name__)"
