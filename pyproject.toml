@@ -1,6 +1,6 @@
 [project]
 name = "ducklake-client"
-version = "0.5.1"
+version = "0.5.2"
 description = "Lightweight wrapper over DuckDB with convenience helpers for DuckLake."
 readme = "README.md"
 requires-python = ">=3.11"
