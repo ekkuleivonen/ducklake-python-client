@@ -1,6 +1,7 @@
 """Implementation operations for DuckLake modules."""
 
 from ducklake_client.operations.schema_create import schema_create
+from ducklake_client.operations.table_append import table_append
 from ducklake_client.operations.table_alter import table_add_column, table_drop_column
 from ducklake_client.operations.table_comment import table_comment
 from ducklake_client.operations.table_create import table_create, table_create_from_csv
@@ -10,6 +11,7 @@ from ducklake_client.operations.view_list import view_list
 
 __all__ = [
     "schema_create",
+    "table_append",
     "table_add_column",
     "table_comment",
     "table_create",

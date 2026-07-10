@@ -94,6 +94,31 @@ lake.table.create(
 )
 ```
 
+Append a microbatch from mapping records without constructing native SQL:
+
+```python
+lake.table.append(
+    "elements",
+    [
+        {"id": 1, "attributes": {"color": "green"}},
+        {"id": 2, "attributes": {"color": "blue"}},
+    ],
+)
+```
+
+`table.append` matches columns by name and also accepts Arrow `Table`,
+`RecordBatch`, and `RecordBatchReader` objects. A `DuckDBPyRelation` created from
+the same `lake.connection` is accepted directly:
+
+```python
+batch = lake.connection.sql("SELECT id, attributes FROM staging_elements")
+lake.table.append("elements", batch)
+```
+
+Empty record batches are a no-op. Each non-empty append is issued as one insert
+statement. Arrow support does not require importing PyArrow in
+`ducklake-client`; the provided object must implement an Arrow C data interface.
+
 ## Ad hoc SQL as dict rows
 
 For quick queries with named parameters (DuckDB ``$param`` syntax), use ``sql_dicts``:
@@ -107,6 +132,9 @@ with DuckLake(
 ) as lake:
     rows = lake.sql_dicts("SELECT $n AS v", n=41)
 ```
+
+The package includes `pytz`, which DuckDB requires when materializing
+`TIMESTAMPTZ` values as Python objects.
 
 ## Transactions
 
