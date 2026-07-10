@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from ducklake_client.modules.base import DuckLakeModule
+from ducklake_client.operations.table_append import AppendSource, table_append
 from ducklake_client.operations.table_alter import table_add_column, table_drop_column
 from ducklake_client.operations.table_comment import table_comment
 from ducklake_client.operations.table_create import table_create, table_create_from_csv
@@ -51,6 +52,17 @@ class TableModule(DuckLakeModule):
             schema_name=schema_name,
             if_not_exists=if_not_exists,
         )
+
+    def append(
+        self,
+        name: str,
+        source: AppendSource,
+        *,
+        schema_name: str = "main",
+    ) -> None:
+        """Append mapping records, Arrow data, or a same-connection relation."""
+
+        table_append(self, name, source, schema_name=schema_name)
 
     def add_column(
         self,
