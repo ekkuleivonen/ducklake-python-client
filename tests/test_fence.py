@@ -8,6 +8,7 @@ from ducklake_client import (
     DiskStorage,
     DuckLake,
     DuckLakeConfigError,
+    DuckLakeFenceError,
     DuckLakeFenceTimeout,
     PostgresCatalog,
     SqliteCatalog,
@@ -81,6 +82,59 @@ class FenceTests(unittest.TestCase):
         self.assertEqual(connection.statements[0][0], "SELECT pg_try_advisory_lock(%s)")
         self.assertEqual(connection.statements[-1][0], "SELECT pg_advisory_unlock(%s)")
         self.assertEqual(connection.statements[0][1], connection.statements[-1][1])
+        self.assertTrue(connection.closed)
+
+    @patch("psycopg.connect")
+    def test_postgres_preserves_body_exception_identity(self, connect: object) -> None:
+        connection = FakePostgresConnection()
+        connect.return_value = connection  # type: ignore[attr-defined]
+        error = DomainError("ingestion failed")
+
+        with self.assertRaises(DomainError) as raised:
+            with catalog_fence(
+                PostgresCatalog("dbname=ducklake"),
+                ("batch-1",),
+                namespace="tests",
+                timeout=0,
+            ):
+                raise error
+
+        self.assertIs(raised.exception, error)
+        self.assertTrue(connection.closed)
+
+    @patch("psycopg.connect")
+    def test_postgres_wraps_release_failure(self, connect: object) -> None:
+        connection = FakePostgresConnection(fail_unlock=True)
+        connect.return_value = connection  # type: ignore[attr-defined]
+
+        with self.assertRaises(DuckLakeFenceError) as raised:
+            with catalog_fence(
+                PostgresCatalog("dbname=ducklake"),
+                ("batch-1",),
+                namespace="tests",
+                timeout=0,
+            ):
+                pass
+
+        self.assertIsInstance(raised.exception.__cause__, RuntimeError)
+
+    @patch("psycopg.connect")
+    def test_release_failure_does_not_mask_body_exception(self, connect: object) -> None:
+        connection = FakePostgresConnection(fail_unlock=True)
+        connect.return_value = connection  # type: ignore[attr-defined]
+        error = DomainError("ingestion failed")
+
+        with self.assertRaises(DomainError) as raised:
+            with catalog_fence(
+                PostgresCatalog("dbname=ducklake"),
+                ("batch-1",),
+                namespace="tests",
+                timeout=0,
+            ):
+                raise error
+
+        self.assertIs(raised.exception, error)
+        self.assertTrue(any("release also failed" in note for note in error.__notes__))
 
 
 class FakeCursor:
@@ -89,18 +143,23 @@ class FakeCursor:
 
 
 class FakePostgresConnection:
-    def __init__(self) -> None:
+    def __init__(self, *, fail_unlock: bool = False) -> None:
         self.statements: list[tuple[str, tuple[int, ...]]] = []
-
-    def __enter__(self) -> "FakePostgresConnection":
-        return self
-
-    def __exit__(self, *args: object) -> None:
-        pass
+        self.fail_unlock = fail_unlock
+        self.closed = False
 
     def execute(self, sql: str, parameters: tuple[int, ...]) -> FakeCursor:
         self.statements.append((sql, parameters))
+        if self.fail_unlock and "pg_advisory_unlock" in sql:
+            raise RuntimeError("unlock failed")
         return FakeCursor()
+
+    def close(self) -> None:
+        self.closed = True
+
+
+class DomainError(Exception):
+    pass
 
 
 if __name__ == "__main__":

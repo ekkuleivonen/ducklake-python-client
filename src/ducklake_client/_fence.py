@@ -99,31 +99,82 @@ def _postgres_fence(
     timeout: float | None,
 ) -> Iterator[None]:
     lock_key = int.from_bytes(identity[:8], "big", signed=True)
+    connection = None
     try:
         import psycopg
 
-        with psycopg.connect(catalog.dsn, autocommit=True) as connection:
-            if timeout is None:
-                connection.execute("SELECT pg_advisory_lock(%s)", (lock_key,))
-            else:
-                deadline = time.monotonic() + timeout
-                while True:
-                    row = connection.execute(
-                        "SELECT pg_try_advisory_lock(%s)", (lock_key,)
-                    ).fetchone()
-                    if row and bool(row[0]):
-                        break
-                    if time.monotonic() >= deadline:
-                        raise DuckLakeFenceTimeout("timed out waiting for PostgreSQL fence")
-                    time.sleep(min(0.05, max(0.0, deadline - time.monotonic())))
-            try:
-                yield
-            finally:
-                connection.execute("SELECT pg_advisory_unlock(%s)", (lock_key,))
+        connection = psycopg.connect(catalog.dsn, autocommit=True)
+        _acquire_postgres_fence(connection, lock_key, timeout=timeout)
     except DuckLakeFenceTimeout:
+        _close_quietly(connection)
         raise
     except Exception as exc:
-        raise DuckLakeFenceError("PostgreSQL fence failed") from exc
+        _close_quietly(connection)
+        raise DuckLakeFenceError("PostgreSQL fence acquisition failed") from exc
+
+    try:
+        yield
+    except BaseException as body_error:
+        try:
+            _release_postgres_fence(connection, lock_key)
+        except Exception as release_error:
+            body_error.add_note(
+                f"PostgreSQL fence release also failed: {release_error!r}"
+            )
+        raise
+    else:
+        try:
+            _release_postgres_fence(connection, lock_key)
+        except Exception as exc:
+            raise DuckLakeFenceError("PostgreSQL fence release failed") from exc
+
+
+def _acquire_postgres_fence(
+    connection: object,
+    lock_key: int,
+    *,
+    timeout: float | None,
+) -> None:
+    if timeout is None:
+        connection.execute("SELECT pg_advisory_lock(%s)", (lock_key,))
+        return
+
+    deadline = time.monotonic() + timeout
+    while True:
+        row = connection.execute(
+            "SELECT pg_try_advisory_lock(%s)", (lock_key,)
+        ).fetchone()
+        if row and bool(row[0]):
+            return
+        if time.monotonic() >= deadline:
+            raise DuckLakeFenceTimeout("timed out waiting for PostgreSQL fence")
+        time.sleep(min(0.05, max(0.0, deadline - time.monotonic())))
+
+
+def _release_postgres_fence(connection: object, lock_key: int) -> None:
+    release_error = None
+    try:
+        connection.execute("SELECT pg_advisory_unlock(%s)", (lock_key,))
+    except Exception as exc:
+        release_error = exc
+    try:
+        connection.close()
+    except Exception as exc:
+        if release_error is None:
+            release_error = exc
+        else:
+            release_error.add_note(f"PostgreSQL fence connection close also failed: {exc!r}")
+    if release_error is not None:
+        raise release_error
+
+
+def _close_quietly(connection: object | None) -> None:
+    if connection is None:
+        return
+    try:
+        connection.close()
+    except Exception:
+        pass
 
 
 @contextmanager
