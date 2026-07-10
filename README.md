@@ -70,7 +70,15 @@ with DuckLake(
     )
     tables = lake.table.list()
     views = lake.view.list()
+    # Metadata-only by default: this does not scan the table data.
     info = lake.table.info("nl_train_stations")
+
+    # Summary statistics and an exact row count both scan table data.
+    detailed_info = lake.table.info(
+        "nl_train_stations",
+        include_summary=True,
+        include_row_count=True,
+    )
 ```
 
 ## Ad hoc SQL as dict rows

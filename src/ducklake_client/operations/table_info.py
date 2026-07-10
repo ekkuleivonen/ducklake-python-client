@@ -24,7 +24,8 @@ def table_info(
     name: str,
     *,
     schema_name: str = "main",
-    include_row_count: bool = True,
+    include_summary: bool = False,
+    include_row_count: bool = False,
     include_snapshots: bool = True,
 ) -> TableInfo:
     schema, table = split_table_name(name, schema_name=schema_name)
@@ -32,7 +33,11 @@ def table_info(
     table_record = _require_table(context, parameters)
     duckdb_table_record = _duckdb_table_record(context, parameters)
     duckdb_column_comments = _duckdb_column_comments(context, parameters)
-    summary_by_name = _summary_by_column(context, context.alias, schema, table)
+    summary_by_name = (
+        _summary_by_column(context, context.alias, schema, table)
+        if include_summary
+        else {}
+    )
     row_count = (
         _row_count(context, context.alias, schema, table) if include_row_count else None
     )
