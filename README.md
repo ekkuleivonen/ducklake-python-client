@@ -194,6 +194,52 @@ lake = DuckLake(
 secret options are supplied, the client does not create a DuckDB secret; access
 then depends on credentials already available in the DuckDB environment.
 
+For a local MinIO server, provide the endpoint without embedding credentials and
+use path-style URLs:
+
+```python
+from ducklake_client import ColumnDef, DuckDBCatalog, DuckLake, S3Storage
+
+with DuckLake(
+    # The catalog is durable because this is a file, not ":memory:".
+    catalog=DuckDBCatalog("state/atlas.ducklake"),
+    storage=S3Storage(
+        bucket="atlas-data",
+        prefix="ducklake",
+        endpoint="http://localhost:9000",
+        key_id="minioadmin",
+        secret_access_key="minioadmin",
+        url_style="path",
+        use_ssl=False,
+    ),
+) as lake:
+    lake.schema.create("main")
+    lake.table.create(
+        "events",
+        id=ColumnDef("BIGINT", nullable=False),
+        payload=ColumnDef("JSON"),
+    )
+```
+
+The S3 settings have these roles:
+
+- `endpoint` selects an S3-compatible service such as MinIO. A URL is accepted;
+  the client passes its host and optional port to DuckDB.
+- `url_style="path"` produces bucket paths suitable for typical local MinIO
+  setups. Use the service's required style in other environments.
+- `use_ssl` controls HTTPS independently of the endpoint spelling.
+- `key_id`, `secret_access_key`, and `session_token` create a temporary DuckDB
+  secret managed by this client. If they and all other secret options are absent,
+  no secret is created; configure credentials in DuckDB or its environment before
+  accessing private objects.
+
+S3 stores DuckLake data files, not the DuckLake catalog itself. Catalog durability
+is configured separately: `DuckDBCatalog` and `SqliteCatalog` persist metadata at
+their filesystem paths, while `PostgresCatalog` persists it in PostgreSQL. Keep
+the catalog on durable storage and back it up independently of the S3 bucket. A
+catalog path inside an ephemeral container will be lost even when its data files
+remain in S3.
+
 ### Exceptions
 
 The package exception hierarchy is public API:
