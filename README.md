@@ -159,3 +159,50 @@ lake = DuckLake(
 ```
 
 Catalogs can be `DuckDBCatalog`, `SqliteCatalog`, or `PostgresCatalog`. Storage can be `DiskStorage` or `S3Storage`.
+
+### Bootstrap behavior
+
+`schema.create`, `table.create`, and `table.create_from_csv` are idempotent by
+default: each uses `IF NOT EXISTS`. Pass `if_not_exists=False` when an existing
+object should be reported as an error. An idempotent create does not reconcile
+or migrate the definition of an object that already exists.
+
+### S3 storage
+
+Configure S3 and S3-compatible storage through `S3Storage`; native secret SQL is
+not required:
+
+```python
+import os
+
+from ducklake_client import DuckDBCatalog, DuckLake, S3Storage
+
+lake = DuckLake(
+    catalog=DuckDBCatalog("metadata.ducklake"),
+    storage=S3Storage(
+        bucket="atlas-data",
+        prefix="ducklake",
+        region="eu-west-1",
+        key_id=os.environ.get("AWS_ACCESS_KEY_ID"),
+        secret_access_key=os.environ.get("AWS_SECRET_ACCESS_KEY"),
+        session_token=os.environ.get("AWS_SESSION_TOKEN"),
+    ),
+)
+```
+
+`endpoint`, `url_style`, and `use_ssl` support S3-compatible services. When no
+secret options are supplied, the client does not create a DuckDB secret; access
+then depends on credentials already available in the DuckDB environment.
+
+### Exceptions
+
+The package exception hierarchy is public API:
+
+- `DuckLakeError` is the base package exception.
+- `DuckLakeConfigError` reports invalid client configuration or helper input.
+- `DuckLakeConnectionError` reports connection initialization failures.
+- `DuckLakeQueryError` reports failures from client and module query helpers.
+
+The original exception is retained as `__cause__`. Operations performed directly
+through `lake.connection` remain native DuckDB operations and raise DuckDB's own
+exceptions.

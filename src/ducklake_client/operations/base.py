@@ -21,6 +21,22 @@ class OperationContext(Protocol):
     def connection(self) -> duckdb.DuckDBPyConnection: ...
 
 
+def execute(
+    context: OperationContext,
+    query: str,
+    *,
+    operation: str,
+) -> duckdb.DuckDBPyConnection:
+    """Execute a module query with the package's stable query exception."""
+
+    try:
+        return context.connection.execute(query)
+    except DuckLakeQueryError:
+        raise
+    except Exception as exc:
+        raise DuckLakeQueryError(f"DuckLake {operation} failed") from exc
+
+
 def template(name: str) -> str:
     return files("ducklake_client.templates").joinpath(name).read_text(encoding="utf-8")
 

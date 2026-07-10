@@ -79,12 +79,17 @@ class DuckLake:
         """
 
         connection = self.connection
-        if params:
-            connection.execute(sql, params)
-        else:
-            connection.execute(sql)
-        columns = [col[0] for col in (connection.description or [])]
-        return [dict(zip(columns, row, strict=False)) for row in connection.fetchall()]
+        try:
+            if params:
+                connection.execute(sql, params)
+            else:
+                connection.execute(sql)
+            columns = [col[0] for col in (connection.description or [])]
+            return [dict(zip(columns, row, strict=False)) for row in connection.fetchall()]
+        except DuckLakeQueryError:
+            raise
+        except Exception as exc:
+            raise DuckLakeQueryError("DuckLake sql_dicts failed") from exc
 
     def sql_scalar(self, sql: str, **params: Any) -> Any:
         """Run SQL with optional ``$name`` parameters and return a single scalar cell."""

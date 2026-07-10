@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 
 from ducklake_client.config import quote_identifier
 from ducklake_client.exceptions import DuckLakeConfigError
-from ducklake_client.operations.base import OperationContext, template
+from ducklake_client.operations.base import OperationContext, execute, template
 
 if TYPE_CHECKING:
     import duckdb
@@ -27,4 +27,4 @@ def schema_create(
         if_not_exists="IF NOT EXISTS " if if_not_exists else "",
         schema_name=".".join(quote_identifier(part) for part in (context.alias, name)),
     )
-    return context.connection.execute(query)
+    return execute(context, query, operation="schema.create")
