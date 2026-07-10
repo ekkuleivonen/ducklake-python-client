@@ -1,5 +1,6 @@
 """Lightweight Python helpers for DuckLake connections."""
 
+from ducklake_client._fence import FenceKey
 from ducklake_client.client import DuckLake
 from ducklake_client.config import (
     CatalogConfig,
@@ -16,6 +17,8 @@ from ducklake_client.exceptions import (
     DuckLakeConfigError,
     DuckLakeConnectionError,
     DuckLakeError,
+    DuckLakeFenceError,
+    DuckLakeFenceTimeout,
     DuckLakeQueryError,
 )
 from ducklake_client.modules import SchemaModule, SnapshotsModule, TableModule, ViewModule
@@ -52,9 +55,12 @@ __all__ = [
     "DuckLakeConfigError",
     "DuckLakeConnectionError",
     "DuckLakeError",
+    "DuckLakeFenceError",
+    "DuckLakeFenceTimeout",
     "DuckLakeQueryError",
     "DuckLakeTableMetadata",
     "DiskStorage",
+    "FenceKey",
     "ListType",
     "MapType",
     "PostgresCatalog",

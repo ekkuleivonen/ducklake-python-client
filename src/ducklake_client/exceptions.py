@@ -15,3 +15,11 @@ class DuckLakeConnectionError(DuckLakeError):
 
 class DuckLakeQueryError(DuckLakeError):
     """Raised when a query fails through the client wrapper."""
+
+
+class DuckLakeFenceError(DuckLakeError):
+    """Raised when a cooperative catalog fence cannot be operated."""
+
+
+class DuckLakeFenceTimeout(DuckLakeFenceError, TimeoutError):
+    """Raised when a cooperative catalog fence cannot be acquired in time."""
