@@ -81,6 +81,19 @@ with DuckLake(
     )
 ```
 
+Nested and parameterized column types can be composed without writing native SQL:
+
+```python
+from ducklake_client import ColumnDef, ListType, MapType, StructType
+
+lake.table.create(
+    "elements",
+    attributes=ColumnDef(MapType("VARCHAR", "VARCHAR")),
+    tags=ColumnDef(ListType("VARCHAR")),
+    location=ColumnDef(StructType({"latitude": "DOUBLE", "longitude": "DOUBLE"})),
+)
+```
+
 ## Ad hoc SQL as dict rows
 
 For quick queries with named parameters (DuckDB ``$param`` syntax), use ``sql_dicts``:
