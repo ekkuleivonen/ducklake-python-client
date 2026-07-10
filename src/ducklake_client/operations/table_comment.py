@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 
 from ducklake_client.config import quote_identifier, quote_literal
 from ducklake_client.exceptions import DuckLakeConfigError
-from ducklake_client.operations.base import OperationContext, template
+from ducklake_client.operations.base import OperationContext, execute, template
 from ducklake_client.operations.table_names import qualified_table_name, split_table_name
 
 if TYPE_CHECKING:
@@ -37,7 +37,7 @@ def table_comment(
             column_name=f"{table_name}.{quote_identifier(column_name)}",
             comment=rendered_comment,
         )
-    return context.connection.execute(query)
+    return execute(context, query, operation="table.comment")
 
 
 def _comment_literal(comment: str | None) -> str:

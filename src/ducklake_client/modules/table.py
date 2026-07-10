@@ -107,13 +107,15 @@ class TableModule(DuckLakeModule):
         name: str,
         *,
         schema_name: str = "main",
-        include_row_count: bool = True,
+        include_summary: bool = False,
+        include_row_count: bool = False,
         include_snapshots: bool = True,
     ) -> TableInfo:
         return table_info(
             self,
             name,
             schema_name=schema_name,
+            include_summary=include_summary,
             include_row_count=include_row_count,
             include_snapshots=include_snapshots,
         )

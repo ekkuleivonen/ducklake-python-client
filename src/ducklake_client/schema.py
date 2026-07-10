@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any, Literal, TypeAlias, get_args
 
@@ -40,27 +41,110 @@ ColumnDataType: TypeAlias = Literal[
 _COLUMN_DATA_TYPES = frozenset(get_args(ColumnDataType))
 
 
+class SQLType:
+    """Base class for composable DuckDB column types."""
+
+    def sql(self) -> str:
+        raise NotImplementedError
+
+
+ColumnType: TypeAlias = ColumnDataType | SQLType
+
+
+@dataclass(frozen=True)
+class DecimalType(SQLType):
+    """A DECIMAL type with explicit precision and scale."""
+
+    precision: int
+    scale: int = 0
+
+    def __post_init__(self) -> None:
+        if not 1 <= self.precision <= 38:
+            raise DuckLakeConfigError("DECIMAL precision must be between 1 and 38")
+        if not 0 <= self.scale <= self.precision:
+            raise DuckLakeConfigError("DECIMAL scale must be between 0 and precision")
+
+    def sql(self) -> str:
+        return f"DECIMAL({self.precision}, {self.scale})"
+
+
+@dataclass(frozen=True)
+class ListType(SQLType):
+    """A variable-length list of another column type."""
+
+    item_type: ColumnType
+
+    def __post_init__(self) -> None:
+        _type_sql(self.item_type)
+
+    def sql(self) -> str:
+        return f"{_type_sql(self.item_type)}[]"
+
+
+@dataclass(frozen=True)
+class MapType(SQLType):
+    """A map with typed keys and values."""
+
+    key_type: ColumnType
+    value_type: ColumnType
+
+    def __post_init__(self) -> None:
+        _type_sql(self.key_type)
+        _type_sql(self.value_type)
+
+    def sql(self) -> str:
+        return f"MAP({_type_sql(self.key_type)}, {_type_sql(self.value_type)})"
+
+
+@dataclass(frozen=True)
+class StructType(SQLType):
+    """A struct containing an ordered mapping of named fields."""
+
+    fields: Mapping[str, ColumnType]
+
+    def __post_init__(self) -> None:
+        if not self.fields:
+            raise DuckLakeConfigError("STRUCT requires at least one field")
+        for name, field_type in self.fields.items():
+            if not name:
+                raise DuckLakeConfigError("STRUCT field names must not be empty")
+            _type_sql(field_type)
+
+    def sql(self) -> str:
+        fields = ", ".join(
+            f"{quote_identifier(name)} {_type_sql(field_type)}"
+            for name, field_type in self.fields.items()
+        )
+        return f"STRUCT({fields})"
+
+
 @dataclass(frozen=True)
 class ColumnDef:
     """Column definition used by table-oriented client methods."""
 
-    data_type: ColumnDataType
+    data_type: ColumnType
     nullable: bool = True
 
     def __post_init__(self) -> None:
-        if self.data_type not in _COLUMN_DATA_TYPES:
-            valid_types = ", ".join(sorted(_COLUMN_DATA_TYPES))
-            raise DuckLakeConfigError(
-                f"invalid column data type: {self.data_type!r}. "
-                f"Expected one of: {valid_types}"
-            )
+        _type_sql(self.data_type)
 
     def sql(self, name: str) -> str:
         if not name:
             raise DuckLakeConfigError("column name must not be empty")
 
         nullability = "" if self.nullable else " NOT NULL"
-        return f"{quote_identifier(name)} {self.data_type}{nullability}"
+        return f"{quote_identifier(name)} {_type_sql(self.data_type)}{nullability}"
+
+
+def _type_sql(data_type: ColumnType) -> str:
+    if isinstance(data_type, SQLType):
+        return data_type.sql()
+    if data_type not in _COLUMN_DATA_TYPES:
+        valid_types = ", ".join(sorted(_COLUMN_DATA_TYPES))
+        raise DuckLakeConfigError(
+            f"invalid column data type: {data_type!r}. Expected one of: {valid_types}"
+        )
+    return data_type
 
 
 @dataclass(frozen=True)

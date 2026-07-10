@@ -5,8 +5,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from ducklake_client.config import quote_identifier
-from ducklake_client.exceptions import DuckLakeConfigError, DuckLakeQueryError
-from ducklake_client.operations.base import OperationContext
+from ducklake_client.exceptions import DuckLakeConfigError
+from ducklake_client.operations.base import OperationContext, execute
 from ducklake_client.operations.table_names import qualified_table_name, split_table_name
 from ducklake_client.schema import ColumnDef
 
@@ -35,10 +35,7 @@ def table_add_column(
     fragment = column.sql(column_name)
     suffix = f" DEFAULT {default_sql}" if default_sql else ""
     query = f"ALTER TABLE {qualified} ADD COLUMN {fragment}{suffix}"
-    try:
-        return context.connection.execute(query)
-    except Exception as exc:
-        raise DuckLakeQueryError("DuckLake table.add_column failed") from exc
+    return execute(context, query, operation="table.add_column")
 
 
 def table_drop_column(
@@ -53,7 +50,4 @@ def table_drop_column(
     schema, table = split_table_name(table_name, schema_name=schema_name)
     qualified = qualified_table_name(context.alias, schema, table)
     query = f"ALTER TABLE {qualified} DROP COLUMN {quote_identifier(column_name)}"
-    try:
-        return context.connection.execute(query)
-    except Exception as exc:
-        raise DuckLakeQueryError("DuckLake table.drop_column failed") from exc
+    return execute(context, query, operation="table.drop_column")

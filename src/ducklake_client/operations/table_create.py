@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 
 from ducklake_client.config import quote_literal
 from ducklake_client.exceptions import DuckLakeConfigError
-from ducklake_client.operations.base import OperationContext, template
+from ducklake_client.operations.base import OperationContext, execute, template
 from ducklake_client.operations.table_names import qualified_table_name, split_table_name
 from ducklake_client.schema import ColumnDef
 
@@ -34,7 +34,7 @@ def table_create(
         table_name=_qualified_name(context.alias, schema_name, table_name),
         columns=",\n    ".join(column.sql(column_name) for column_name, column in columns.items()),
     )
-    return context.connection.execute(query)
+    return execute(context, query, operation="table.create")
 
 
 def table_create_from_csv(
@@ -53,7 +53,7 @@ def table_create_from_csv(
         table_name=_qualified_name(context.alias, schema_name, name),
         source=quote_literal(source),
     )
-    return context.connection.execute(query)
+    return execute(context, query, operation="table.create_from_csv")
 
 
 def _qualified_name(alias: str, schema_name: str, name: str) -> str:
