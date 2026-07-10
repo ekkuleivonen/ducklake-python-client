@@ -8,6 +8,7 @@ from functools import cached_property
 from typing import TYPE_CHECKING, Any
 
 from ducklake_client._connection import ConnectionManager
+from ducklake_client._fence import FenceKey, catalog_fence
 from ducklake_client.config import (
     CatalogConfig,
     CatalogInput,
@@ -47,6 +48,7 @@ class DuckLake:
             raise TypeError("attach must be a DuckLakeAttachConfig")
 
         self.alias = alias
+        self.catalog = catalog
         self._manager = ConnectionManager(
             catalog=catalog,
             storage=storage,
@@ -136,6 +138,23 @@ class DuckLake:
         if connection.fetchone() is not None:
             raise DuckLakeQueryError("sql_one expected one row, got multiple rows")
         return dict(zip(columns, row, strict=False))
+
+    @contextmanager
+    def fence(
+        self,
+        *keys: FenceKey,
+        namespace: str = "ducklake-client",
+        timeout: float | None = None,
+    ) -> Iterator[DuckLake]:
+        """Cooperatively exclude other clients using the same catalog and keys."""
+
+        with catalog_fence(
+            self.catalog,
+            keys,
+            namespace=namespace,
+            timeout=timeout,
+        ):
+            yield self
 
     @contextmanager
     def transaction(self) -> Iterator[DuckLake]:

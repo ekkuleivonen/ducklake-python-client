@@ -119,6 +119,53 @@ Empty record batches are a no-op. Each non-empty append is issued as one insert
 statement. Arrow support does not require importing PyArrow in
 `ducklake-client`; the provided object must implement an Arrow C data interface.
 
+### Fenced and idempotent appends
+
+DuckLake tables do not enforce unique or primary-key constraints. `table.append`
+therefore provides at-least-once writes by itself. Use a cooperative fence plus a
+transaction when a retried microbatch must not be appended twice:
+
+```python
+batch_id = "atlas-elements-2026-07-11T00:00:00Z"
+
+with lake.fence("atlas", "elements", batch_id, timeout=30):
+    with lake.transaction():
+        already_ingested = lake.sql_scalar(
+            """
+            SELECT EXISTS (
+                SELECT 1
+                FROM lake.main.ingestion_batches
+                WHERE batch_id = $batch_id
+            )
+            """,
+            batch_id=batch_id,
+        )
+        if not already_ingested:
+            lake.table.append("elements", records)
+            lake.table.append("ingestion_batches", [{"batch_id": batch_id}])
+```
+
+Create the marker table once during bootstrap. The fence serializes cooperating
+writers for the same keys; the transaction makes the marker and data append
+commit or roll back together. Every writer for that idempotency domain must use
+the same fence namespace and keys.
+
+Fence guarantees depend on the catalog:
+
+- `PostgresCatalog` uses PostgreSQL session advisory locks and supports remote,
+  cross-process writers. The lock is released if its connection closes or the
+  process exits.
+- File-backed `DuckDBCatalog` and `SqliteCatalog` use advisory sidecar file locks
+  plus process-local locks. They coordinate processes that share a filesystem
+  with working advisory-lock semantics and all use this client.
+- In-memory DuckDB catalogs and platforms without advisory file locking fall
+  back to process-local exclusion only.
+
+Fencing is cooperative rather than a DuckLake uniqueness constraint. It cannot
+exclude writers that bypass `lake.fence`, and filesystem locks may not be reliable
+on every network filesystem. `DuckLakeFenceTimeout` reports acquisition timeout;
+other backend failures raise `DuckLakeFenceError`.
+
 ## Ad hoc SQL as dict rows
 
 For quick queries with named parameters (DuckDB ``$param`` syntax), use ``sql_dicts``:
@@ -301,6 +348,8 @@ The package exception hierarchy is public API:
 - `DuckLakeError` is the base package exception.
 - `DuckLakeConfigError` reports invalid client configuration or helper input.
 - `DuckLakeConnectionError` reports connection initialization failures.
+- `DuckLakeFenceError` reports cooperative fencing failures, with
+  `DuckLakeFenceTimeout` for acquisition timeouts.
 - `DuckLakeQueryError` reports failures from client and module query helpers.
 
 The original exception is retained as `__cause__`. Operations performed directly
