@@ -12,6 +12,7 @@ from ducklake_client.config import (
     CatalogConfig,
     CatalogInput,
     DuckDBConfig,
+    DuckLakeAttachConfig,
     StorageConfig,
     StorageInput,
 )
@@ -35,12 +36,15 @@ class DuckLake:
         storage: StorageInput,
         alias: str = "lake",
         duckdb: DuckDBConfig | None = None,
+        attach: DuckLakeAttachConfig | None = None,
         attach_options: Mapping[str, object] | None = None,
     ) -> None:
         if not isinstance(catalog, CatalogConfig):
             raise TypeError("catalog must be a DuckDBCatalog, PostgresCatalog, or SqliteCatalog")
         if not isinstance(storage, StorageConfig):
             raise TypeError("storage must be a DiskStorage or S3Storage")
+        if attach is not None and not isinstance(attach, DuckLakeAttachConfig):
+            raise TypeError("attach must be a DuckLakeAttachConfig")
 
         self.alias = alias
         self._manager = ConnectionManager(
@@ -48,6 +52,7 @@ class DuckLake:
             storage=storage,
             alias=alias,
             duckdb=duckdb or DuckDBConfig(),
+            attach=attach,
             attach_options=attach_options,
         )
 

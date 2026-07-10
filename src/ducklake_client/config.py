@@ -43,6 +43,34 @@ DuckDBSettings: TypeAlias = Mapping[str, DuckDBSettingValue]
 
 
 @dataclass(frozen=True)
+class DuckLakeAttachConfig:
+    """Typed options applied when attaching a DuckLake catalog."""
+
+    create_if_not_exists: bool | None = None
+    data_inlining_row_limit: int | None = None
+    encrypted: bool | None = None
+    automatic_migration: bool | None = None
+    override_data_path: bool | None = None
+
+    def __post_init__(self) -> None:
+        limit = self.data_inlining_row_limit
+        if limit is not None and (isinstance(limit, bool) or not isinstance(limit, int)):
+            raise DuckLakeConfigError("data_inlining_row_limit must be an integer")
+        if limit is not None and limit < 0:
+            raise DuckLakeConfigError("data_inlining_row_limit must not be negative")
+
+    def options(self) -> dict[str, object]:
+        values = {
+            "CREATE_IF_NOT_EXISTS": self.create_if_not_exists,
+            "DATA_INLINING_ROW_LIMIT": self.data_inlining_row_limit,
+            "ENCRYPTED": self.encrypted,
+            "AUTOMATIC_MIGRATION": self.automatic_migration,
+            "OVERRIDE_DATA_PATH": self.override_data_path,
+        }
+        return {name: value for name, value in values.items() if value is not None}
+
+
+@dataclass(frozen=True)
 class DuckDBCatalog(CatalogConfig):
     """A DuckDB-backed DuckLake catalog."""
 

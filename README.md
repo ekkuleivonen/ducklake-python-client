@@ -158,6 +158,32 @@ lake = DuckLake(
 )
 ```
 
+Common DuckLake `ATTACH` settings have a typed configuration object:
+
+```python
+from ducklake_client import (
+    DiskStorage,
+    DuckDBCatalog,
+    DuckLake,
+    DuckLakeAttachConfig,
+)
+
+lake = DuckLake(
+    catalog=DuckDBCatalog("metadata.ducklake"),
+    storage=DiskStorage("data"),
+    attach=DuckLakeAttachConfig(
+        data_inlining_row_limit=50,
+        automatic_migration=False,
+    ),
+)
+```
+
+`data_inlining_row_limit=0` disables data inlining for the connection. Typed
+options also cover `create_if_not_exists`, `encrypted`, and
+`override_data_path`. Less common or extension-version-specific parameters can
+still be passed through `attach_options`; when both forms specify the same key,
+`attach_options` takes precedence.
+
 Catalogs can be `DuckDBCatalog`, `SqliteCatalog`, or `PostgresCatalog`. Storage can be `DiskStorage` or `S3Storage`.
 
 ### Bootstrap behavior

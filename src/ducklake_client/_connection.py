@@ -12,6 +12,7 @@ from ducklake_client.config import (
     CatalogConfig,
     DuckDBConfig,
     DuckDBSettingValue,
+    DuckLakeAttachConfig,
     StorageConfig,
     quote_literal,
 )
@@ -29,6 +30,7 @@ class ConnectionManager:
     storage: StorageConfig
     alias: str
     duckdb: DuckDBConfig = field(default_factory=DuckDBConfig)
+    attach: DuckLakeAttachConfig | None = None
     attach_options: Mapping[str, object] | None = None
     _connection: duckdb.DuckDBPyConnection | None = field(default=None, init=False, repr=False)
 
@@ -65,6 +67,7 @@ class ConnectionManager:
                     catalog=self.catalog,
                     storage=self.storage,
                     alias=self.alias,
+                    attach=self.attach,
                     attach_options=self.attach_options,
                 )
             )
