@@ -8,7 +8,12 @@ from functools import cached_property
 from typing import TYPE_CHECKING, Any
 
 from ducklake_client._connection import ConnectionManager
-from ducklake_client._fence import FenceKey, catalog_fence
+from ducklake_client._fence import (
+    FenceKey,
+    FenceSpec,
+    catalog_fence,
+    catalog_fence_set,
+)
 from ducklake_client.config import (
     CatalogConfig,
     CatalogInput,
@@ -151,6 +156,23 @@ class DuckLake:
         with catalog_fence(
             self.catalog,
             keys,
+            namespace=namespace,
+            timeout=timeout,
+        ):
+            yield self
+
+    @contextmanager
+    def fence_set(
+        self,
+        *fences: FenceSpec,
+        namespace: str = "ducklake-client",
+        timeout: float | None = None,
+    ) -> Iterator[DuckLake]:
+        """Acquire independent cooperative fences through one backend session."""
+
+        with catalog_fence_set(
+            self.catalog,
+            fences,
             namespace=namespace,
             timeout=timeout,
         ):
