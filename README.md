@@ -150,6 +150,30 @@ writers for the same keys; the transaction makes the marker and data append
 commit or roll back together. Every writer for that idempotency domain must use
 the same fence namespace and keys.
 
+When one mutation overlaps several independent identities, acquire them as one
+fence set. Unlike passing several keys to `fence()`, each `FenceSpec` remains an
+independent contention domain. The backend acquires the complete set in a stable
+order through one session and one overall timeout:
+
+```python
+from ducklake_client import FenceSpec
+
+with lake.fence_set(
+    FenceSpec.shared("maintenance"),
+    FenceSpec.exclusive("crawl", crawl_id),
+    FenceSpec.exclusive("content", document_id),
+    namespace="atlas",
+    timeout=30,
+):
+    with lake.transaction():
+        # Resolve authoritative state and commit while every identity is fenced.
+        ...
+```
+
+Fence sets deduplicate identities and upgrade a duplicated shared identity to
+exclusive. PostgreSQL uses one advisory-lock session for the whole set. Local
+catalogs conservatively serialize shared fences as exclusive file/process locks.
+
 Fence guarantees depend on the catalog:
 
 - `PostgresCatalog` uses PostgreSQL session advisory locks and supports remote,

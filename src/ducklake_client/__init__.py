@@ -1,6 +1,6 @@
 """Lightweight Python helpers for DuckLake connections."""
 
-from ducklake_client._fence import FenceKey
+from ducklake_client._fence import FenceKey, FenceMode, FenceSpec
 from ducklake_client.client import DuckLake
 from ducklake_client.config import (
     CatalogConfig,
@@ -61,6 +61,8 @@ __all__ = [
     "DuckLakeTableMetadata",
     "DiskStorage",
     "FenceKey",
+    "FenceMode",
+    "FenceSpec",
     "ListType",
     "MapType",
     "PostgresCatalog",

@@ -8,8 +8,9 @@ import threading
 import time
 from collections.abc import Iterator
 from contextlib import contextmanager
+from dataclasses import dataclass
 from pathlib import Path
-from typing import TypeAlias
+from typing import Literal, TypeAlias
 
 from ducklake_client.config import (
     CatalogConfig,
@@ -24,6 +25,37 @@ from ducklake_client.exceptions import (
 )
 
 FenceKey: TypeAlias = str | int | bytes
+FenceMode: TypeAlias = Literal["exclusive", "shared"]
+
+
+@dataclass(frozen=True, slots=True)
+class FenceSpec:
+    """One independently contended identity in a cooperative fence set."""
+
+    keys: tuple[FenceKey, ...]
+    mode: FenceMode = "exclusive"
+
+    def __post_init__(self) -> None:
+        if not self.keys:
+            raise DuckLakeConfigError("fence requires at least one key")
+        if self.mode not in ("exclusive", "shared"):
+            raise DuckLakeConfigError(f"unsupported fence mode: {self.mode!r}")
+        for key in self.keys:
+            _encode_key(key)
+
+    @classmethod
+    def exclusive(cls, *keys: FenceKey) -> FenceSpec:
+        return cls(keys=keys, mode="exclusive")
+
+    @classmethod
+    def shared(cls, *keys: FenceKey) -> FenceSpec:
+        return cls(keys=keys, mode="shared")
+
+
+@dataclass(frozen=True, slots=True)
+class _FenceIdentity:
+    value: bytes
+    mode: FenceMode
 
 _LOCKS: dict[str, threading.Lock] = {}
 _LOCKS_GUARD = threading.Lock()
@@ -39,18 +71,54 @@ def catalog_fence(
 ) -> Iterator[None]:
     """Acquire the strongest cooperative fence available for a catalog."""
 
-    identity = _fence_identity(keys, namespace=namespace)
+    with catalog_fence_set(
+        catalog,
+        (FenceSpec(keys),),
+        namespace=namespace,
+        timeout=timeout,
+    ):
+        yield
+
+
+@contextmanager
+def catalog_fence_set(
+    catalog: CatalogConfig,
+    fences: tuple[FenceSpec, ...],
+    *,
+    namespace: str,
+    timeout: float | None,
+) -> Iterator[None]:
+    """Acquire independently contended fences through one backend session."""
+
+    identities = _fence_identities(fences, namespace=namespace)
     _validate_timeout(timeout)
 
     if isinstance(catalog, PostgresCatalog):
-        with _postgres_fence(catalog, identity, timeout=timeout):
+        with _postgres_fence_set(catalog, identities, timeout=timeout):
             yield
         return
     if isinstance(catalog, DuckDBCatalog | SqliteCatalog):
-        with _local_catalog_fence(catalog, identity, timeout=timeout):
+        with _local_catalog_fence_set(catalog, identities, timeout=timeout):
             yield
         return
     raise DuckLakeConfigError(f"unsupported fence catalog: {type(catalog).__name__}")
+
+
+def _fence_identities(
+    fences: tuple[FenceSpec, ...], *, namespace: str
+) -> tuple[_FenceIdentity, ...]:
+    if not fences:
+        raise DuckLakeConfigError("fence set requires at least one fence")
+    by_identity: dict[bytes, FenceMode] = {}
+    for fence in fences:
+        identity = _fence_identity(fence.keys, namespace=namespace)
+        current = by_identity.get(identity)
+        if current is None or fence.mode == "exclusive":
+            by_identity[identity] = fence.mode
+    return tuple(
+        _FenceIdentity(value=identity, mode=mode)
+        for identity, mode in sorted(by_identity.items())
+    )
 
 
 def _fence_identity(keys: tuple[FenceKey, ...], *, namespace: str) -> bytes:
@@ -92,23 +160,34 @@ def _validate_timeout(timeout: float | None) -> None:
 
 
 @contextmanager
-def _postgres_fence(
+def _postgres_fence_set(
     catalog: PostgresCatalog,
-    identity: bytes,
+    identities: tuple[_FenceIdentity, ...],
     *,
     timeout: float | None,
 ) -> Iterator[None]:
-    lock_key = int.from_bytes(identity[:8], "big", signed=True)
     connection = None
+    acquired: list[tuple[int, FenceMode]] = []
     try:
         import psycopg
 
         connection = psycopg.connect(catalog.dsn, autocommit=True)
-        _acquire_postgres_fence(connection, lock_key, timeout=timeout)
+        deadline = None if timeout is None else time.monotonic() + timeout
+        locks = _postgres_locks(identities)
+        for lock_key, mode in locks:
+            _acquire_postgres_fence(
+                connection,
+                lock_key,
+                mode=mode,
+                deadline=deadline,
+            )
+            acquired.append((lock_key, mode))
     except DuckLakeFenceTimeout:
+        _release_postgres_fences_quietly(connection, acquired)
         _close_quietly(connection)
         raise
     except Exception as exc:
+        _release_postgres_fences_quietly(connection, acquired)
         _close_quietly(connection)
         raise DuckLakeFenceError("PostgreSQL fence acquisition failed") from exc
 
@@ -116,7 +195,7 @@ def _postgres_fence(
         yield
     except BaseException as body_error:
         try:
-            _release_postgres_fence(connection, lock_key)
+            _release_postgres_fences(connection, acquired)
         except Exception as release_error:
             body_error.add_note(
                 f"PostgreSQL fence release also failed: {release_error!r}"
@@ -124,25 +203,38 @@ def _postgres_fence(
         raise
     else:
         try:
-            _release_postgres_fence(connection, lock_key)
+            _release_postgres_fences(connection, acquired)
         except Exception as exc:
             raise DuckLakeFenceError("PostgreSQL fence release failed") from exc
+
+
+def _postgres_locks(
+    identities: tuple[_FenceIdentity, ...],
+) -> tuple[tuple[int, FenceMode], ...]:
+    by_key: dict[int, FenceMode] = {}
+    for identity in identities:
+        key = int.from_bytes(identity.value[:8], "big", signed=True)
+        current = by_key.get(key)
+        if current is None or identity.mode == "exclusive":
+            by_key[key] = identity.mode
+    return tuple(sorted(by_key.items()))
 
 
 def _acquire_postgres_fence(
     connection: object,
     lock_key: int,
     *,
-    timeout: float | None,
+    mode: FenceMode,
+    deadline: float | None,
 ) -> None:
-    if timeout is None:
-        connection.execute("SELECT pg_advisory_lock(%s)", (lock_key,))
+    suffix = "_shared" if mode == "shared" else ""
+    if deadline is None:
+        connection.execute(f"SELECT pg_advisory_lock{suffix}(%s)", (lock_key,))
         return
 
-    deadline = time.monotonic() + timeout
     while True:
         row = connection.execute(
-            "SELECT pg_try_advisory_lock(%s)", (lock_key,)
+            f"SELECT pg_try_advisory_lock{suffix}(%s)", (lock_key,)
         ).fetchone()
         if row and bool(row[0]):
             return
@@ -151,21 +243,42 @@ def _acquire_postgres_fence(
         time.sleep(min(0.05, max(0.0, deadline - time.monotonic())))
 
 
-def _release_postgres_fence(connection: object, lock_key: int) -> None:
-    release_error = None
+def _release_postgres_fences(
+    connection: object, acquired: list[tuple[int, FenceMode]]
+) -> None:
+    release_errors: list[Exception] = []
     try:
-        connection.execute("SELECT pg_advisory_unlock(%s)", (lock_key,))
-    except Exception as exc:
-        release_error = exc
-    try:
-        connection.close()
-    except Exception as exc:
-        if release_error is None:
-            release_error = exc
-        else:
-            release_error.add_note(f"PostgreSQL fence connection close also failed: {exc!r}")
-    if release_error is not None:
-        raise release_error
+        for lock_key, mode in reversed(acquired):
+            suffix = "_shared" if mode == "shared" else ""
+            try:
+                connection.execute(
+                    f"SELECT pg_advisory_unlock{suffix}(%s)", (lock_key,)
+                )
+            except Exception as exc:
+                release_errors.append(exc)
+    finally:
+        try:
+            connection.close()
+        except Exception as exc:
+            release_errors.append(exc)
+    if release_errors:
+        error = release_errors[0]
+        for extra in release_errors[1:]:
+            error.add_note(f"additional PostgreSQL fence release failure: {extra!r}")
+        raise error
+
+
+def _release_postgres_fences_quietly(
+    connection: object | None, acquired: list[tuple[int, FenceMode]]
+) -> None:
+    if connection is None:
+        return
+    for lock_key, mode in reversed(acquired):
+        suffix = "_shared" if mode == "shared" else ""
+        try:
+            connection.execute(f"SELECT pg_advisory_unlock{suffix}(%s)", (lock_key,))
+        except Exception:
+            pass
 
 
 def _close_quietly(connection: object | None) -> None:
@@ -178,37 +291,50 @@ def _close_quietly(connection: object | None) -> None:
 
 
 @contextmanager
-def _local_catalog_fence(
+def _local_catalog_fence_set(
     catalog: DuckDBCatalog | SqliteCatalog,
-    identity: bytes,
+    identities: tuple[_FenceIdentity, ...],
     *,
     timeout: float | None,
 ) -> Iterator[None]:
     catalog_path = str(catalog.path)
-    lock_path = _lock_path(catalog_path, identity)
-    registry_key = f"{type(catalog).__name__}:{_canonical_path(catalog_path)}:{identity.hex()}"
-    local_lock = _process_lock(registry_key)
     deadline = None if timeout is None else time.monotonic() + timeout
-
-    if not _acquire_process_lock(local_lock, deadline):
-        raise DuckLakeFenceTimeout("timed out waiting for local catalog fence")
-    handle = None
+    acquired_locks: list[threading.Lock] = []
+    handles: list[object] = []
     try:
-        if lock_path is not None:
-            try:
-                lock_path.parent.mkdir(parents=True, exist_ok=True)
-                handle = lock_path.open("a+b")
-                _acquire_file_lock(handle, deadline)
-            except DuckLakeFenceTimeout:
-                raise
-            except Exception as exc:
-                raise DuckLakeFenceError("local catalog fence failed") from exc
+        for identity in identities:
+            registry_key = (
+                f"{type(catalog).__name__}:{_canonical_path(catalog_path)}:"
+                f"{identity.value.hex()}"
+            )
+            local_lock = _process_lock(registry_key)
+            if not _acquire_process_lock(local_lock, deadline):
+                raise DuckLakeFenceTimeout("timed out waiting for local catalog fence")
+            acquired_locks.append(local_lock)
+
+            lock_path = _lock_path(catalog_path, identity.value)
+            if lock_path is not None:
+                handle = None
+                try:
+                    lock_path.parent.mkdir(parents=True, exist_ok=True)
+                    handle = lock_path.open("a+b")
+                    _acquire_file_lock(handle, deadline)
+                    handles.append(handle)
+                except DuckLakeFenceTimeout:
+                    if handle is not None:
+                        handle.close()
+                    raise
+                except Exception as exc:
+                    if handle is not None:
+                        handle.close()
+                    raise DuckLakeFenceError("local catalog fence failed") from exc
         yield
     finally:
-        if handle is not None:
+        for handle in reversed(handles):
             _release_file_lock(handle)
             handle.close()
-        local_lock.release()
+        for local_lock in reversed(acquired_locks):
+            local_lock.release()
 
 
 def _process_lock(key: str) -> threading.Lock:
